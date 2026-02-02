@@ -30,6 +30,116 @@ body {
     min-height: 100vh;
 }
 
+/* Help UI & Shortcut Input */
+.top-right-group {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 3000;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.shortcut-input {
+    background: var(--bg-item);
+    border: 1px solid var(--border);
+    color: var(--primary-light);
+    border-radius: 4px;
+    padding: 0;
+    width: 100pt;
+    height: 32pt;
+    font-size: 30pt;
+    text-align: center;
+    line-height: 32pt;
+    outline: none;
+    transition: all 0.2s;
+    overflow: hidden;
+}
+
+.shortcut-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+.help-btn {
+    background: var(--bg-item);
+    border: 1px solid var(--border);
+    color: var(--primary);
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.help-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.help-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    z-index: 4000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    /* 初期状態ではクリックをスルー */
+    transition: all 0.3s;
+}
+
+.help-modal.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    /* 表示中だけ入力を受け付ける */
+}
+
+.help-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    border-radius: 12px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.help-list {
+    list-style: none;
+    padding: 0;
+    margin: 1.5rem 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+.help-list li {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 2px 0;
+}
+
+.help-list li span {
+    color: var(--primary-light);
+    font-family: monospace;
+    font-weight: bold;
+}
+
 .main-content {
     display: flex;
     flex-direction: column;
@@ -266,9 +376,20 @@ input {
 }
 
 .q-idx {
-    width: 30px;
+    width: 24px;
     opacity: 0.5;
     font-size: 0.8rem;
+    flex-shrink: 0;
+}
+
+.q-thumb {
+    width: 64px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 4px;
+    margin-right: 12px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
 }
 
 .q-info {
@@ -338,6 +459,83 @@ input {
     padding: 0.4rem;
     color: white;
     cursor: pointer;
+}
+
+/* Drag & Drop Overlay */
+.drop-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(var(--primary-rgb, 0, 150, 255), 0.2);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    border: 4px dashed var(--primary);
+    box-sizing: border-box;
+    pointer-events: none;
+    /* ここが重要: 背後のボタンを押せるようにする */
+}
+
+.drop-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    /* ドラッグ中だけ捕まえる */
+}
+
+/* Lock Overlay */
+.lock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    /* 20%くらいの不透明度 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5000;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+
+.lock-overlay.active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.lock-icon {
+    font-size: 5rem;
+}
+
+.lock-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 5px;
+    background: var(--accent);
+    width: 0%;
+    z-index: 5500;
+    transition: width 0.1s linear;
+}
+
+.drop-msg {
+    font-size: 2rem;
+    font-weight: bold;
+    color: white;
+    text-shadow: 0 0 20px var(--primary);
+    pointer-events: none;
 }
 
 .queue-footer {
