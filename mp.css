@@ -305,11 +305,26 @@ input {
     width: 100%;
 }
 
+.add-input-large {
+    padding: 1rem;
+    font-size: 1.1rem;
+    width: auto;
+    flex: 1;
+}
+
 .add-section .input-row {
     display: flex;
     gap: 0.5rem;
     width: 100%;
     margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.add-section .tier-select {
+    flex: 0 0 auto;
+    min-width: 80px;
+    max-width: 100px;
+    padding: 0.75rem 0.5rem;
 }
 
 .add-section input#add-url {
@@ -372,7 +387,8 @@ input {
 }
 
 .queue-item.active {
-    background: rgba(139, 92, 246, 0.2);
+    background: var(--active-bg, rgba(139, 92, 246, 0.2));
+    border-left: 3px solid var(--primary);
 }
 
 .q-idx {
@@ -564,6 +580,194 @@ input {
 
 .lock-btn {
     color: #a1a1aa;
+}
+
+/* Tier Styles */
+.tier-select,
+.sort-select {
+    background: var(--bg-item);
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    border-radius: 6px;
+    padding: 0.5rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.tier-select:focus,
+.sort-select:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.q-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.q-title-row .q-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.tier-inline-select {
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 1.4rem;
+    font-weight: bold;
+    cursor: pointer;
+    min-width: 70px;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.tier-inline-select:hover {
+    border-color: var(--primary);
+}
+
+.tier-inline-select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+}
+
+/* Tier colors based on tier value */
+.tier-inline-select option[value="★★★★★★"],
+#add-tier option[value="★★★★★★"] {
+    background: #990000;
+    color: #fff;
+}
+
+.tier-inline-select option[value="★★★★★"],
+#add-tier option[value="★★★★★"] {
+    background: #ff0000;
+    color: #fff;
+}
+
+.tier-inline-select option[value="★★★★"],
+#add-tier option[value="★★★★"] {
+    background: #ffa500;
+    color: #000;
+}
+
+.tier-inline-select option[value="★★★"],
+#add-tier option[value="★★★"] {
+    background: #ffff00;
+    color: #000;
+}
+
+.tier-inline-select option[value="★★"],
+#add-tier option[value="★★"] {
+    background: #9ad82e;
+    color: #000;
+}
+
+.tier-inline-select option[value="★"],
+#add-tier option[value="★"] {
+    background: #3b82f6;
+    color: #fff;
+}
+
+.tier-inline-select option[value="△"],
+#add-tier option[value="△"] {
+    background: #8b5cf6;
+    color: #fff;
+}
+
+.tier-inline-select option[value="×"],
+#add-tier option[value="×"] {
+    background: #1e293b;
+    color: #94a3b8;
+}
+
+.tier-inline-select option[value=""],
+#add-tier option[value=""] {
+    background: #1e293b;
+    color: #94a3b8;
+}
+
+/* Tier badges (if used elsewhere) */
+.tier-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.tier-6 {
+    background: linear-gradient(135deg, #990000, #cc0000);
+    color: #fff !important;
+    text-shadow: 0 0 10px rgba(153, 0, 0, 0.8);
+    animation: tier-glow-red 1.5s ease-in-out infinite alternate;
+}
+
+.tier-5 {
+    background: linear-gradient(135deg, #ff0000, #cc0000);
+    color: #fff !important;
+    text-shadow: 0 0 8px rgba(255, 0, 0, 0.6);
+    animation: tier-glow-red 2s ease-in-out infinite alternate-reverse;
+}
+
+.tier-4 {
+    background: linear-gradient(135deg, #ffa500, #cc8400);
+    color: #000 !important;
+    box-shadow: 0 0 5px rgba(255, 165, 0, 0.4);
+}
+
+.tier-3 {
+    background: #ffff00;
+    color: #000 !important;
+}
+
+.tier-2 {
+    background: #9ad82e;
+    color: #000 !important;
+}
+
+.tier-1 {
+    background: #3b82f6;
+    color: #fff !important;
+}
+
+.tier-0 {
+    background: #8b5cf6;
+    color: #fff !important;
+}
+
+.tier-x {
+    background: #475569;
+    color: #cbd5e1 !important;
+}
+
+@keyframes tier-glow-red {
+    from {
+        box-shadow: 0 0 5px rgba(153, 0, 0, 0.5);
+    }
+
+    to {
+        box-shadow: 0 0 15px rgba(204, 0, 0, 0.9);
+    }
+}
+
+@keyframes tier-glow {
+    from {
+        box-shadow: 0 0 5px rgba(255, 165, 0, 0.3);
+    }
+
+    to {
+        box-shadow: 0 0 10px rgba(255, 165, 0, 0.6);
+    }
+}
+
+.tier-inline-select {
+    color: var(--primary) !important;
 }
 
 /* Mobile */

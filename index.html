@@ -133,8 +133,21 @@
                     <div style="flex:1; display:flex; flex-direction:column; gap:0.5rem;">
                         <input type="text" id="add-url" class="app-input" placeholder="YouTube/YT Music Video URL">
                         <div class="input-row">
-                            <input type="text" id="add-title" class="app-input" placeholder="Song Title">
-                            <input type="text" id="add-author" class="app-input" placeholder="Artist">
+                            <input type="text" id="add-title" class="app-input add-input-large" placeholder="Song Title"
+                                style="flex: 2; min-width: 150px;">
+                            <input type="text" id="add-author" class="app-input add-input-large" placeholder="Artist"
+                                style="flex: 1; min-width: 100px;">
+                            <select id="add-tier" class="app-input tier-select">
+                                <option value="">Tier</option>
+                                <option value="×">×</option>
+                                <option value="★★★★★★">★★★★★★</option>
+                                <option value="★★★★★">★★★★★</option>
+                                <option value="★★★★">★★★★</option>
+                                <option value="★★★">★★★</option>
+                                <option value="★★">★★</option>
+                                <option value="★">★</option>
+                                <option value="△">△</option>
+                            </select>
                         </div>
                     </div>
                     <button id="btn-add" class="btn primary-btn big-add-btn">Add to Queue<br>([)</button>
@@ -155,6 +168,11 @@
                     <span id="queue-status" style="font-size: 0.7rem; opacity: 0.6;">0 / 32767</span>
                 </div>
                 <div class="header-actions">
+                    <select id="sort-mode" class="btn small-btn sort-select"
+                        style="padding: 0.2rem 0.4rem; min-width: 70px;">
+                        <option value="manual">手動</option>
+                        <option value="tier">Tier順</option>
+                    </select>
                     <button id="btn-dedupe" class="btn orange-btn small-btn">Dedupe</button>
                     <button id="btn-clear" class="btn red-btn small-btn">Clear</button>
                 </div>

@@ -111,6 +111,54 @@ let audioCtx = null;
 
 const MAX_QUEUE = 32767;
 
+// Tier ranking order (higher index = better tier)
+const TIER_ORDER = ['×', '△', '★', '★★', '★★★', '★★★★', '★★★★★', '★★★★★★'];
+
+// Tier theme colors
+const TIER_THEMES = {
+    '★★★★★★': { primary: '#990000', light: '#cc0000', accent: '#660000' }, // 6: 濃紅
+    '★★★★★': { primary: '#ff0000', light: '#ff4d4d', accent: '#cc0000' }, // 5: 赤
+    '★★★★': { primary: '#ffa500', light: '#ffc04d', accent: '#cc8400' }, // 4: オレンジ
+    '★★★': { primary: '#ffff00', light: '#ffff80', accent: '#cccc00' }, // 3: 黄色
+    '★★': { primary: '#9ad82e', light: '#bef264', accent: '#65a30d' }, // 2: 黄緑
+    '★': { primary: '#3b82f6', light: '#93c5fd', accent: '#1d4ed8' }, // 1: 青
+    '△': { primary: '#8b5cf6', light: '#a78bfa', accent: '#f43f5e' }, // △: デフォルト
+    '×': { primary: '#475569', light: '#94a3b8', accent: '#1e293b' }, // ×: グレー
+    '': { primary: '#475569', light: '#94a3b8', accent: '#1e293b' } // Empty defaults to × color
+};
+
+function applyTierTheme(tier) {
+    const theme = TIER_THEMES[tier] || TIER_THEMES[''];
+    const root = document.documentElement;
+    root.style.setProperty('--primary', theme.primary);
+    root.style.setProperty('--primary-light', theme.light);
+    root.style.setProperty('--accent', theme.accent);
+
+    // Convert hex to rgba for active background
+    const hexToRgba = (hex, alpha) => {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+    root.style.setProperty('--active-bg', hexToRgba(theme.primary, 0.25));
+
+    // Also update progress bar directly for immediate effect
+    const progressBar = document.getElementById('progress-bar');
+    if (progressBar) {
+        progressBar.style.background = theme.primary;
+        progressBar.style.boxShadow = `0 0 15px ${theme.primary}`;
+    }
+
+    console.log('Theme applied:', tier, theme);
+}
+
+function getTierRank(tier) {
+    if (!tier) return -1; // No tier = lowest priority
+    const idx = TIER_ORDER.indexOf(tier);
+    return idx >= 0 ? idx : -1;
+}
+
 // DOM Elements
 const el = {
     nowTitle: document.getElementById('now-title'),
@@ -120,6 +168,8 @@ const el = {
     addUrl: document.getElementById('add-url'),
     addTitle: document.getElementById('add-title'),
     addAuthor: document.getElementById('add-author'),
+    addTier: document.getElementById('add-tier'),
+    sortMode: document.getElementById('sort-mode'),
     fileInput: document.getElementById('file-input'),
     lockOverlay: document.getElementById('lock-overlay'),
     lockProgress: document.getElementById('lock-progress'),
@@ -342,7 +392,7 @@ async function getMetaData(id) {
 }
 
 // --- Main ---
-async function addToQueue(uOrId, tIn, aIn) {
+async function addToQueue(uOrId, tIn, aIn, tierIn) {
     if (queue.length >= MAX_QUEUE) return;
     const cleanId = extractId(uOrId);
     if (!cleanId) return;
@@ -351,6 +401,7 @@ async function addToQueue(uOrId, tIn, aIn) {
         id: cleanId,
         title: tIn || "Loading...",
         author: aIn || "...",
+        tier: tierIn || "",
         lastTime: 0
     };
     queue.push(tempItem);
@@ -389,6 +440,30 @@ async function addToQueue(uOrId, tIn, aIn) {
     if (currentIndex === -1) playIndex(idx);
 }
 
+function getTierBadgeHTML(tier) {
+    if (!tier) return '';
+    const tierClass = getTierColorClass(tier);
+    return `<span class="tier-badge ${tierClass}">${tier}</span>`;
+}
+
+function getTierColorClass(tier) {
+    if (!tier || tier === '×') return 'tier-x';
+    if (tier === '★★★★★★') return 'tier-6';
+    if (tier === '★★★★★') return 'tier-5';
+    if (tier === '★★★★') return 'tier-4';
+    if (tier === '★★★') return 'tier-3';
+    if (tier === '★★') return 'tier-2';
+    if (tier === '★') return 'tier-1';
+    if (tier === '△') return 'tier-0';
+    return '';
+}
+
+function getTierSelectHTML(currentTier, index) {
+    const tiers = ['×', '★★★★★★', '★★★★★', '★★★★', '★★★', '★★', '★', '△'];
+    let options = tiers.map(t => `<option value="${t}" ${t === currentTier ? 'selected' : ''}>${t}</option>`).join('');
+    return `<select class="tier-inline-select" data-idx="${index}">${options}</select>`;
+}
+
 function renderQueue() {
     const frag = document.createDocumentFragment();
     el.queueList.innerHTML = '';
@@ -405,7 +480,10 @@ function renderQueue() {
             <span class="q-idx">${isCurrent ? '▶' : i + 1}</span>
             <img class="q-thumb" src="https://i.ytimg.com/vi/${item.id}/mqdefault.jpg" alt="thumb">
             <div class="q-info">
-                <span class="q-title">${safe(item.title)}</span>
+                <div class="q-title-row">
+                    <span class="q-title">${safe(item.title)}</span>
+                    ${getTierSelectHTML(item.tier, i)}
+                </div>
                 <span class="q-author">${safe(item.author)}</span>
                 <div class="mini-progress-bg">
                     <div class="mini-progress-bar" id="mini-progress-${i}" style="width: 0%"></div>
@@ -417,8 +495,23 @@ function renderQueue() {
             </div>
         `;
 
+        // Tier select change handler
+        const tierSelect = li.querySelector('.tier-inline-select');
+        tierSelect.onclick = (e) => e.stopPropagation();
+        tierSelect.onchange = (e) => {
+            e.stopPropagation();
+            const idx = parseInt(e.target.dataset.idx);
+            queue[idx].tier = e.target.value;
+            // Apply tier theme
+            applyTierTheme(e.target.value);
+            // If sort mode is tier, re-sort
+            if (el.sortMode && el.sortMode.value === 'tier') {
+                sortQueueByTier();
+            }
+        };
+
         li.onclick = (e) => {
-            if (e.target.closest('.action-btn')) return;
+            if (e.target.closest('.action-btn') || e.target.closest('.tier-inline-select')) return;
             selectedListIndex = i;
             // Populate edit fields
             el.nowTitle.value = item.title;
@@ -427,7 +520,7 @@ function renderQueue() {
             renderItemsActive();
         };
         li.ondblclick = (e) => {
-            if (e.target.closest('.action-btn')) return;
+            if (e.target.closest('.action-btn') || e.target.closest('.tier-inline-select')) return;
             playIndex(i);
         };
 
@@ -463,6 +556,18 @@ function renderQueue() {
     });
     el.queueList.appendChild(frag);
     el.queueStatus.innerText = `${queue.length} / ${MAX_QUEUE}`;
+}
+
+function sortQueueByTier() {
+    const playingId = currentIndex >= 0 ? queue[currentIndex].id : null;
+    queue.sort((a, b) => {
+        const rankA = getTierRank(a.tier);
+        const rankB = getTierRank(b.tier);
+        return rankB - rankA; // Higher tier first
+    });
+    currentIndex = playingId ? queue.findIndex(it => it.id === playingId) : -1;
+    selectedListIndex = -1;
+    renderQueue();
 }
 
 function deleteItemByIndex(idx) {
@@ -519,11 +624,11 @@ function playIndex(i) {
     el.nowTitle.value = item.title;
     el.nowAuthor.value = item.author;
     el.nowId.value = shortenUrl(item.id);
+
+    // Apply tier theme for current song
+    applyTierTheme(item.tier || '');
+
     renderItemsActive();
-    setTimeout(() => {
-        const a = document.querySelector('.queue-item.active');
-        if (a) a.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 50);
 }
 
 function safe(s) { return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ""; }
@@ -553,10 +658,28 @@ function skipPrev() { if (currentIndex > 0) playIndex(currentIndex - 1); else if
 
 // Event Handlers
 document.getElementById('btn-add').onclick = () => {
-    addToQueue(el.addUrl.value, el.addTitle.value, el.addAuthor.value);
+    addToQueue(el.addUrl.value, el.addTitle.value, el.addAuthor.value, el.addTier ? el.addTier.value : '');
     // el.addUrl.value = ''; // addToQueue内で短縮表示させるため、ここではクリアしないか、完全に消すかはお好み
     el.addUrl.value = el.addTitle.value = el.addAuthor.value = '';
+    if (el.addTier) el.addTier.value = '';
 };
+
+// Sort mode change handler
+if (el.sortMode) {
+    el.sortMode.onchange = () => {
+        if (el.sortMode.value === 'tier') {
+            sortQueueByTier();
+        }
+        // 'manual' doesn't need action - user can drag to reorder
+    };
+}
+
+// Add tier dropdown theme change
+if (el.addTier) {
+    el.addTier.onchange = () => {
+        applyTierTheme(el.addTier.value);
+    };
+}
 
 document.getElementById('btn-recommend-vocaloid').onclick = async () => {
     const btn = document.getElementById('btn-recommend-vocaloid');
@@ -725,18 +848,52 @@ el.progressContainer.onclick = (e) => {
 };
 
 // IO
+// Tier形式変換関数
+function convertOldTierToNew(tier) {
+    if (!tier || tier === '×') return '×';
+    // 既に新形式の場合はそのまま返す
+    if (tier.includes('★') || tier === '△') return tier;
+    // 旧形式から新形式への変換
+    const tierMap = {
+        'SSSSS': '★★★★★',
+        'SSSS': '★★★★',
+        'SSS': '★★★',
+        'SS': '★★',
+        'S+': '★',
+        'S': '★',
+        'S-': '★',
+        'A+': '△',
+        'A': '△',
+        'A-': '△',
+        'B+': '△',
+        'B': '△',
+        'B-': '△',
+        'C+': '×',
+        'C': '×',
+        'C-': '×',
+        'D+': '×',
+        'D': '×',
+        'D-': '×',
+        'F': '×',
+        'F-': '×',
+        'F--': '★★★★★★'
+    };
+    return tierMap[tier] !== undefined ? tierMap[tier] : '×';
+}
+
 function processImportFile(f) {
     if (!f) return;
     const r = new FileReader();
     r.onload = (ev) => {
         try {
             const d = JSON.parse(ev.target.result);
+            let importedQueue = [];
             if (Array.isArray(d)) {
                 // 旧形式 (配列のみ) - 既存のキューに追加
-                queue = [...queue, ...d].slice(0, MAX_QUEUE);
+                importedQueue = d;
             } else if (d && d.queue) {
                 // 新形式
-                queue = [...queue, ...d.queue].slice(0, MAX_QUEUE);
+                importedQueue = d.queue;
                 // 初めて読み込むファイル名の場合のみ、再生時間を合算
                 if (!importedFileNames.has(f.name)) {
                     cumulativeSeconds += (d.cumulativeSeconds || 0);
@@ -744,6 +901,12 @@ function processImportFile(f) {
                     el.cumulativeTime.innerText = formatCumulative(cumulativeSeconds);
                 }
             }
+            // Tier形式を変換
+            importedQueue = importedQueue.map(item => ({
+                ...item,
+                tier: convertOldTierToNew(item.tier)
+            }));
+            queue = [...queue, ...importedQueue].slice(0, MAX_QUEUE);
             // インポート後はリストを再描画
             renderQueue();
         } catch (e) {
