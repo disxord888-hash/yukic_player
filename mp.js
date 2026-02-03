@@ -12,6 +12,7 @@ let lockStartTime = 0;
 let isLoop = false;
 let isQueueLoop = false;
 let isShuffle = false;
+let isTouchDevice = false;
 let importedFileNames = new Set();
 
 // Vocaloid曲キャッシュ（動的取得用）
@@ -183,7 +184,7 @@ const el = {
     nowId: document.getElementById('now-id'),
     progressBar: document.getElementById('progress-bar'),
     progressContainer: document.getElementById('progress-container'),
-    lockBar: document.getElementById('lock-bar'),
+    lockCircles: document.querySelectorAll('.lock-fg-circle'),
     volumeSlider: document.getElementById('volume-slider'),
     volumeInput: document.getElementById('volume-input'),
     helpBtn: document.getElementById('help-btn'),
@@ -439,6 +440,19 @@ async function addToQueue(uOrId, tIn, aIn, tierIn) {
     }
     if (currentIndex === -1) playIndex(idx);
 }
+
+function checkTouchDevice() {
+    isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    if (isTouchDevice) {
+        document.body.classList.add('mobile-ui');
+    } else {
+        document.body.classList.remove('mobile-ui');
+    }
+}
+
+// 初期実行とリサイズ時に再確認
+checkTouchDevice();
+window.addEventListener('resize', checkTouchDevice);
 
 function getTierBadgeHTML(tier) {
     if (!tier) return '';
@@ -734,22 +748,46 @@ document.getElementById('btn-dedupe').onclick = () => {
 };
 
 // Lock Timer Logic
-el.btnLock.onmousedown = el.lockOverlay.onmousedown = () => {
+function updateLockProgress(p) {
+    if (el.lockCircles) {
+        el.lockCircles.forEach(circle => {
+            const circumference = circle.getTotalLength();
+            const offset = circumference - (p / 100) * circumference;
+            circle.style.strokeDasharray = circumference;
+            circle.style.strokeDashoffset = offset;
+        });
+    }
+}
+
+el.btnLock.onmousedown = el.lockOverlay.onmousedown = (e) => {
+    // タッチデバイスでの重複動作防止
+    if (e.type === 'touchstart') e.preventDefault();
+
     lockStartTime = Date.now();
+    updateLockProgress(0);
+
     lockTimer = setInterval(() => {
         const p = Math.min(((Date.now() - lockStartTime) / 4000) * 100, 100);
-        if (el.lockBar) el.lockBar.style.width = p + '%';
+        updateLockProgress(p);
+
         if (p >= 100) {
             clearInterval(lockTimer);
             isLocked = !isLocked;
             el.lockOverlay.classList.toggle('active', isLocked);
-            if (el.lockBar) el.lockBar.style.width = '0%';
+            updateLockProgress(0);
         }
     }, 50);
 };
-window.onmouseup = () => {
-    if (lockTimer) { clearInterval(lockTimer); lockTimer = null; }
-    if (el.lockBar) el.lockBar.style.width = '0%';
+
+// Touch events for mobile
+el.btnLock.ontouchstart = el.lockOverlay.ontouchstart = el.btnLock.onmousedown;
+
+window.onmouseup = window.ontouchend = () => {
+    if (lockTimer) {
+        clearInterval(lockTimer);
+        lockTimer = null;
+    }
+    updateLockProgress(0);
 };
 
 // Controls

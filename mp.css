@@ -351,6 +351,8 @@ input {
     align-items: center;
     justify-content: center;
     transition: 0.1s;
+    overflow: hidden;
+    /* For circular progress consistency */
 }
 
 .btn:hover {
@@ -533,17 +535,43 @@ input {
 
 .lock-icon {
     font-size: 5rem;
+    opacity: 0.2;
+}
+
+.lock-visual-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lock-svg {
+    position: absolute;
+    transform: rotate(-90deg);
+}
+
+.lock-bg-circle {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 6;
+}
+
+.lock-fg-circle {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 219.9;
+    /* 2 * pi * 35 */
+    stroke-dashoffset: 219.9;
+    transition: stroke-dashoffset 0.1s linear;
 }
 
 .lock-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    height: 5px;
-    background: var(--accent);
-    width: 0%;
-    z-index: 5500;
-    transition: width 0.1s linear;
+    display: none;
+    /* Replaced by circular progress */
 }
 
 .drop-msg {
@@ -580,6 +608,21 @@ input {
 
 .lock-btn {
     color: #a1a1aa;
+    padding: 0.2rem 1rem;
+    min-width: 100px;
+}
+
+.lock-btn .lock-text {
+    font-size: 0.8rem;
+}
+
+.lock-visual-container.mini {
+    width: 32px;
+    height: 32px;
+}
+
+.lock-visual-container.mini .lock-icon {
+    font-size: 1rem;
 }
 
 /* Tier Styles */
@@ -770,17 +813,93 @@ input {
     color: var(--primary) !important;
 }
 
-/* Mobile */
-@media (max-width: 600px) {
-    .app-container {
-        padding: 0.5rem;
-        gap: 0.8rem;
-    }
+/* Mobile - Shared Styles */
+.mobile-ui {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
 
-    .all-controls .btn {
-        flex: 1 1 21%;
-        /* 1行に4つ程度目安 */
-        height: 45px;
-        min-width: 0;
+.mobile-ui input,
+.mobile-ui textarea {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.mobile-ui .app-container {
+    padding: 0.5rem;
+    gap: 0.8rem;
+}
+
+.mobile-ui .all-controls .btn {
+    flex: 1 1 21%;
+    height: 45px;
+    min-width: 0;
+}
+
+.mobile-ui .lock-btn {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    z-index: 6000;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    padding: 0;
+    background: var(--bg-item);
+    border: 2px solid var(--primary);
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.mobile-ui .lock-btn .lock-text {
+    display: none;
+}
+
+.mobile-ui .lock-btn .lock-visual-container.mini {
+    width: 50px;
+    height: 50px;
+}
+
+.mobile-ui .lock-btn .lock-visual-container.mini .lock-icon {
+    font-size: 1.5rem;
+    display: block;
+}
+
+.mobile-ui .lock-overlay {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 40px;
+}
+
+.mobile-ui .lock-visual-container {
+    width: 80px;
+    height: 80px;
+}
+
+.mobile-ui .lock-icon {
+    font-size: 2rem;
+}
+
+.mobile-ui .lock-svg {
+    width: 80px;
+    height: 80px;
+}
+
+/* Apply Mobile Styles based on Media Query OR Touch Class */
+@media (max-width: 600px),
+(pointer: coarse) {
+    body {
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
     }
+}
+
+/* Base class applied by JS for touch detection (applied to body) */
+body.mobile-ui {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
