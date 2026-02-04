@@ -1,5 +1,15 @@
 // Yuki Player Logic - Performance Optimized
 
+// Clear any persistent storage to respect user request - No data left behind
+try {
+    localStorage.clear();
+    sessionStorage.clear();
+    // Clear cookies if possible (limited by subdomain/security)
+    document.cookie.split(";").forEach((c) => {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+} catch (e) { }
+
 // State
 let queue = [];
 let currentIndex = -1;
@@ -20,11 +30,29 @@ let isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
 let importedFileNames = new Set();
 let lastVolumeBeforeMute = 100;
 let tPrefixCount = 0;
+let yPrefixCount = 0;
 let isSlashKeyPrefixActive = false;
 let isBackslashPressed = false; // \ (\) state for offset seek
 let isSlashPressed = false; // / state for offset seek
 let imageStartTime = 0; // For seeking in images/GIFs
 let heldKeysMap = new Map(); // For keyboard monitor
+let isShortcutDisplayEnabled = false;
+
+// Helpers
+function safe(str) {
+    if (!str) return "";
+    return String(str).replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[m]);
+}
+
+function decodeChars(s) {
+    if (!s) return "";
+    return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/\\u0026/g, '&')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'");
+}
 
 // Vocaloid曲キャッシュ（動的取得用）
 let vocaloidCache = [];
@@ -214,7 +242,8 @@ const el = {
     helpBtn: document.getElementById('help-btn'),
     helpModal: document.getElementById('help-modal'),
     heldKeysIndicator: document.getElementById('held-keys-indicator'),
-    presetSelect: document.getElementById('preset-select')
+    presetSelect: document.getElementById('preset-select'),
+    localThumb: null // For dynamically assigned local thumbnail
 };
 const announcementTimes = document.querySelectorAll('.ann-time');
 const announcementMsgs = document.querySelectorAll('.ann-msg');
@@ -276,7 +305,7 @@ function startTimeUpdates() {
     timeUpdateInterval = setInterval(() => {
         if (currentIndex >= 0 && queue[currentIndex]) {
             const type = queue[currentIndex].type;
-            if (type === 'soundcloud' || type === 'vimeo') return;
+            if (type === 'soundcloud' || type === 'vimeo' || type === 'file') return;
         }
         if (!isPlayerReady || !player || typeof player.getCurrentTime !== 'function') return;
 
@@ -447,6 +476,127 @@ async function getMetaData(id) {
     });
 }
 
+async function searchYoutube(query) {
+    const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+
+    // 試行するプロキシリスト
+    const proxies = [
+        url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        url => `https://thingproxy.freeboard.io/fetch/${url}`
+    ];
+
+    let html = null;
+
+    for (const getProxyUrl of proxies) {
+        try {
+            const proxyUrl = getProxyUrl(searchUrl);
+            const response = await fetch(proxyUrl);
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            // AllOriginsはJSONでラップされているが、他はテキストを直接返す場合がある
+            if (proxyUrl.includes('allorigins.win')) {
+                const data = await response.json();
+                html = data.contents;
+            } else {
+                html = await response.text();
+            }
+
+            if (html && html.includes('videoRenderer')) break; // 成功
+        } catch (e) {
+            console.warn(`Proxy ${getProxyUrl.name || 'alternative'} failed:`, e);
+            continue;
+        }
+    }
+
+    if (!html) {
+        console.error('All proxies failed for YouTube search');
+        return [];
+    }
+
+    try {
+        const results = [];
+        // Find all videoRenderer starts
+        const videoMatches = [...html.matchAll(/"videoRenderer"\s*:\s*\{/g)];
+        const indices = videoMatches.map(m => m.index);
+
+        for (let i = 0; i < indices.length; i++) {
+            const start = indices[i];
+            const end = (i < indices.length - 1) ? indices[i + 1] : html.length;
+            const block = html.substring(start, end);
+
+            // Extract Video ID
+            const idMatch = block.match(/"videoId"\s*:\s*"([^"]+)"/);
+            if (!idMatch) continue;
+            const id = idMatch[1];
+
+            // Shorts Check
+            if (block.includes('"overlayStyle":"SHORTS"') || block.includes('"style":"SHORTS"') || block.includes('video-shorts-')) continue;
+
+            // Extract Title - looks for "text":"..." inside a "title":{...}
+            let title = "Unknown Title";
+            const tMatch = block.match(/"title"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            if (tMatch) {
+                title = decodeChars(tMatch[1]);
+            }
+
+            if (title.toLowerCase().includes('#shorts')) continue;
+
+            // Extract Author - looks for "text":"..." inside byline/owner keys
+            let author = "Unknown Artist";
+            const aMatch = block.match(/"(?:longBylineText|ownerText|shortBylineText|ownerTitle|bylineText)"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            if (aMatch) {
+                author = decodeChars(aMatch[1]);
+            }
+
+            results.push({ id, title, author });
+            if (results.length >= 3) break;
+        }
+
+        // Fallback for ID only if nothing found
+        if (results.length === 0) {
+            const idMatches = [...html.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)];
+            const uniqueIds = [...new Set(idMatches.map(m => m[1]))].slice(0, 3);
+            return uniqueIds.map(id => ({ id, title: `Video (${id})`, author: "YouTube" }));
+        }
+
+        return results;
+    } catch (e) {
+        console.warn('YouTube search parse failed:', e);
+    }
+    return [];
+}
+
+function showSearchSelectionModal(results, query, onSelect) {
+    const modal = document.createElement('div');
+    modal.className = 'help-modal active';
+    modal.style.zIndex = "6000";
+
+    let itemsHtml = results.map(item => `
+        <div class="ts-list-item" onclick="this.parentElement.parentElement.parentElement.remove(); window.onSearchSelect('${item.id}', '${item.title.replace(/'/g, "\\'")}','${item.author.replace(/'/g, "\\'")}');">
+            <img src="https://i.ytimg.com/vi/${item.id}/default.jpg" style="width:60px; height:auto; border-radius:4px;">
+            <div style="flex:1; overflow:hidden;">
+                <div class="q-title" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${safe(item.title)}</div>
+                <div class="q-author">${safe(item.author)}</div>
+            </div>
+        </div>
+    `).join('');
+
+    window.onSearchSelect = (id, title, author) => {
+        onSelect({ id, title, author });
+        delete window.onSearchSelect;
+    };
+
+    modal.innerHTML = `
+        <div class="help-content ts-list-content" style="max-width:600px;">
+            <h3 style="margin-bottom:1rem;">Search: "${safe(query)}"</h3>
+            <div class="ts-list-container">${itemsHtml}</div>
+            <button onclick="this.parentElement.parentElement.remove()" class="btn" style="margin-top:1rem; width:100%;">Cancel</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
 
 
 function isSoundCloudUrl(u) {
@@ -521,6 +671,26 @@ async function getSpotifyMeta(id) {
 async function addToQueue(uOrId, tIn, aIn, memoIn, tierIn) {
     if (!uOrId) return;
     if (queue.length >= MAX_QUEUE) return;
+
+    // もしURLでもIDでもない（プロンプト的な文字列）ならYouTube検索を試みる
+    if (!isSoundCloudUrl(uOrId) && !isVimeoUrl(uOrId) && extractId(uOrId) === null && uOrId.length > 0 && !uOrId.startsWith('{')) {
+        const btn = document.getElementById('btn-add');
+        const originalText = btn ? btn.innerHTML : "";
+        if (btn) btn.innerHTML = "🔍 Search...";
+
+        const results = await searchYoutube(uOrId);
+        if (btn) btn.innerHTML = originalText;
+
+        if (results && results.length > 0) {
+            showSearchSelectionModal(results, uOrId, (selected) => {
+                addToQueue(selected.id, selected.title, selected.author, memoIn, tierIn);
+            });
+            return; // モーダルで選択されるまで待機（あるいはコールバックで再入）
+        } else {
+            alert("動画が見つかりませんでした: " + uOrId);
+            return;
+        }
+    }
 
     // Handle JSON object input (for a single song)
     if (typeof uOrId === 'string' && uOrId.trim().startsWith('{')) {
@@ -847,6 +1017,7 @@ function playIndex(i) {
     if (i < 0 || i >= queue.length) return;
     currentIndex = i;
     const item = queue[i];
+    lastKnownTime = item.lastTime || 0;
     const type = item.type || 'youtube';
 
     const ytContainer = document.getElementById('youtube-player');
@@ -897,6 +1068,7 @@ function playIndex(i) {
             if (localImage) {
                 localImage.style.display = 'block';
                 localImage.src = currentObjectUrl;
+                localImage.style.zIndex = "10";
 
                 // Timer for image duration
                 lastKnownTime = 0;
@@ -931,10 +1103,19 @@ function playIndex(i) {
             }
         } else {
             // Audio / Video
-            if (localImage) localImage.style.display = 'none';
+            if (localImage) {
+                if (item.thumbnail) {
+                    localImage.src = item.thumbnail;
+                    localImage.style.display = 'block';
+                    localImage.style.zIndex = "5"; // Below video if it has visual? No, audio-only will show this.
+                } else {
+                    localImage.style.display = 'none';
+                }
+            }
             if (localVideo) {
                 localVideo.style.display = 'block';
                 localVideo.src = currentObjectUrl;
+                localVideo.style.zIndex = "10";
                 localVideo.load();
 
                 const vol = parseInt(el.volumeSlider.value) || 50;
@@ -1176,6 +1357,11 @@ function initLocalPlayer() {
     // Events
     localVideo.addEventListener('timeupdate', () => {
         if (currentIndex < 0 || queue[currentIndex].type !== 'file' || queue[currentIndex].isImage) return;
+        if (localVideo.paused) {
+            lastKnownTime = localVideo.currentTime;
+            return;
+        }
+
         const cur = localVideo.currentTime;
         const dur = localVideo.duration;
 
@@ -1192,6 +1378,9 @@ function initLocalPlayer() {
             el.progressBar.style.width = pct + '%';
             const mini = document.getElementById(`mini-progress-${currentIndex}`);
             if (mini) mini.style.width = pct + '%';
+
+            // Save lastTime
+            queue[currentIndex].lastTime = cur;
         }
     });
 
@@ -1200,8 +1389,12 @@ function initLocalPlayer() {
     });
 
     localVideo.addEventListener('loadedmetadata', () => {
-        if (queue[currentIndex]) {
+        if (queue[currentIndex] && queue[currentIndex].type === 'file') {
             queue[currentIndex].duration = localVideo.duration;
+            if (queue[currentIndex].lastTime > 0) {
+                localVideo.currentTime = queue[currentIndex].lastTime;
+                lastKnownTime = queue[currentIndex].lastTime;
+            }
         }
     });
 }
@@ -1281,10 +1474,93 @@ if (el.sortMode) {
         // 'manual' doesn't need action - user can drag to reorder
     };
 }
-// UtaTen Toggle
-document.getElementById('btn-utaten').onclick = () => {
-    const el = document.getElementById('utaten-container');
-    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+// Screenshot Feature
+async function takeScreenshot() {
+    const btn = document.getElementById('btn-screenshot');
+    if (!btn) return;
+
+    try {
+        btn.innerText = '⌛';
+        const canvas = await html2canvas(document.body, {
+            backgroundColor: '#0f172a',
+            useCORS: true,
+            scale: 2,
+            ignoreElements: (el) => el.classList && el.classList.contains('help-modal')
+        });
+
+        const link = document.createElement('a');
+        link.download = `music-player-screenshot-${new Date().getTime()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+
+        btn.innerText = '✅';
+        setTimeout(() => btn.innerText = '📸', 2000);
+    } catch (err) {
+        console.error('Screenshot failed:', err);
+        btn.innerText = '❌';
+        setTimeout(() => btn.innerText = '📸', 2000);
+    }
+}
+
+document.getElementById('btn-screenshot').onclick = takeScreenshot;
+
+// GitHub Share Link Generator - Modal Version
+let currentShareData = '';
+
+function getShareableQueue() {
+    const shareableTypes = ['youtube', 'soundcloud', 'vimeo'];
+    return queue
+        .filter(item => shareableTypes.includes(item.type || 'youtube'))
+        .map(item => ({
+            id: item.id,
+            type: item.type || 'youtube',
+            title: item.title,
+            author: item.author,
+            tier: item.tier
+        }));
+}
+
+function openShareLinkModal() {
+    const shareableQueue = getShareableQueue();
+    if (shareableQueue.length === 0) {
+        alert("共有可能な曲（YouTube/SoundCloud/Vimeo）がありません。");
+        return;
+    }
+    currentShareData = encodeURIComponent(JSON.stringify(shareableQueue));
+    document.getElementById('share-link-output').value = `${shareableQueue.length}曲を共有準備中...\n上のボタンでリンクを生成してください。`;
+    document.getElementById('share-link-modal').classList.add('active');
+}
+
+document.getElementById('btn-share-link').onclick = openShareLinkModal;
+
+document.getElementById('share-github-btn').onclick = () => {
+    if (!currentShareData) return;
+    const url = `https://disxord888-hash.github.io/yukic_player/?=${currentShareData}`;
+    document.getElementById('share-link-output').value = url;
+};
+
+document.getElementById('share-local-btn').onclick = () => {
+    if (!currentShareData) return;
+    const url = `http://localhost:3000/mp/?=${currentShareData}`;
+    document.getElementById('share-link-output').value = url;
+};
+
+document.getElementById('share-copy-btn').onclick = () => {
+    const output = document.getElementById('share-link-output');
+    const text = output.value;
+    if (!text || text.includes('準備中')) {
+        alert("先にリンクを生成してください。");
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('share-copy-btn');
+        btn.innerText = '✅';
+        setTimeout(() => btn.innerText = 'コピー', 2000);
+    }).catch(err => {
+        console.error("Clipboard failed:", err);
+        output.select();
+        document.execCommand('copy');
+    });
 };
 
 // Add tier dropdown theme change
@@ -1316,9 +1592,18 @@ document.getElementById('btn-recommend-vocaloid').onclick = async () => {
     }
 };
 el.addUrl.oninput = () => {
-    const id = extractId(el.addUrl.value);
-    if (id && el.addUrl.value.length > 30) {
-        el.addUrl.value = shortenUrl(id);
+    const val = el.addUrl.value;
+    if (val.includes('http') || val.includes('youtube.com') || val.includes('youtu.be')) {
+        const id = extractId(val);
+        if (id && val.length > 30) {
+            el.addUrl.value = shortenUrl(id);
+        }
+    }
+};
+
+el.addUrl.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+        document.getElementById('btn-add').click();
     }
 };
 const copySelection = () => {
@@ -1665,11 +1950,50 @@ function selectExportFormat() {
     const input = normalizeZenkaku(raw).toLowerCase();
     if (input === 'j' || input === 'json') return 'json';
     if (input === 't' || input === 'txt') return 'txt';
+    if (input === 'z' || input === 'zip') return 'zip';
     return null;
 }
 
-function exportDataToFile(data, filename, extension) {
+async function exportDataToFile(data, filename, extension) {
     const fullFilename = filename + "." + extension;
+
+    if (extension === 'zip') {
+        if (typeof JSZip === 'undefined') {
+            alert("JSZip library not loaded. Please check your connection.");
+            return;
+        }
+        const zip = new JSZip();
+
+        // Remove File objects from metadata but keep filename info
+        const cleanQueue = data.queue.map(item => {
+            const { file, ...rest } = item;
+            return rest;
+        });
+        const metaData = { ...data, queue: cleanQueue };
+        zip.file("playlist.json", JSON.stringify(metaData, null, 2));
+
+        // Add actual files
+        const addedFiles = new Set();
+        for (const item of data.queue) {
+            if (item.type === 'file' && item.file) {
+                // Ensure unique filenames in ZIP
+                let fname = item.file.name;
+                if (addedFiles.has(fname)) {
+                    fname = Date.now() + "_" + fname;
+                }
+                zip.file(fname, item.file);
+                addedFiles.add(fname);
+            }
+        }
+
+        const content = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = fullFilename;
+        a.click();
+        return;
+    }
+
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1677,27 +2001,42 @@ function exportDataToFile(data, filename, extension) {
     a.click();
 }
 
-function exportItemToFile(idx, format) {
+async function exportItemToFile(idx, format) {
     const item = queue[idx];
     if (!item) return;
     const safeTitle = (item.title || "song").replace(/[\\/:*?"<>|]/g, "_");
-    exportDataToFile({ queue: [item] }, safeTitle, format);
+    await exportDataToFile({ queue: [item] }, safeTitle, format);
 }
 
-document.getElementById('btn-export').onclick = () => {
+document.getElementById('btn-export').onclick = async () => {
     // 日付名を作成 (YYYYMMDD_HHMMSS)
     const now = new Date();
     const ts = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
 
-    const format = selectExportFormat();
+    // If queue contains local files, suggest ZIP
+    const hasLocalFiles = queue.some(item => item.type === 'file' && item.file);
+    let formatMsg = "保存形式を選択してください:\n[ j ]: JSON形式\n[ t ]: TXT形式";
+    if (hasLocalFiles) {
+        formatMsg += "\n[ z ]: ZIP形式 (ローカルファイル同梱)";
+    }
+    formatMsg += "\n(それ以外・キャンセルで中止)";
+
+    const raw = prompt(formatMsg);
+    if (!raw) return;
+    const input = normalizeZenkaku(raw).toLowerCase();
+    let format = null;
+    if (input === 'j' || input === 'json') format = 'json';
+    else if (input === 't' || input === 'txt') format = 'txt';
+    else if (input === 'z' || input === 'zip') format = 'zip';
+
     if (!format) return;
+
     const exportData = {
         queue: queue,
         cumulativeSeconds: cumulativeSeconds,
-        clockFormat: currentClockFormat,
-        clockFormat: currentClockFormat
+        clockFormat: typeof currentClockFormat !== 'undefined' ? currentClockFormat : '24h'
     };
-    exportDataToFile(exportData, ts, format);
+    await exportDataToFile(exportData, ts, format);
 };
 document.getElementById('btn-import').onclick = () => el.fileInput.click();
 if (document.getElementById('btn-load-file')) {
@@ -1740,9 +2079,21 @@ document.addEventListener('drop', (e) => {
     e.stopPropagation();
     dragCounter = 0;
     dropOverlay.classList.remove('active');
+
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
         handleFiles(files);
+        return;
+    }
+
+    // Try to get text/URL data (for dragged links)
+    const text = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
+    if (text) {
+        // Drop might contain multiple lines if it's a list, but usually it's one link
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        for (const line of lines) {
+            addToQueue(line);
+        }
     }
 });
 
@@ -1751,6 +2102,28 @@ function handleFiles(files) {
 
     // Check if it's a playlist import (json/txt) or media files
     const first = files[0];
+    const imageExts = ['.webp', '.gif', '.png', '.jpeg', '.jpg', '.svg'];
+
+    // Special case: If exactly one image is dropped while a local audio is playing, treat it as a thumbnail
+    if (files.length === 1 && currentIndex >= 0 && queue[currentIndex].type === 'file' && !queue[currentIndex].isImage) {
+        if (imageExts.some(ext => first.name.toLowerCase().endsWith(ext))) {
+            const currentItem = queue[currentIndex];
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentItem.thumbnail = e.target.result;
+                // If it's the currently playing one, update the view immediately
+                if (localImage) {
+                    localImage.src = currentItem.thumbnail;
+                    localImage.style.display = 'block';
+                    localImage.style.zIndex = "5";
+                }
+                renderQueue();
+            };
+            reader.readAsDataURL(first);
+            return;
+        }
+    }
+
     if (first.name.endsWith('.json') || (first.name.endsWith('.txt') && files.length === 1)) {
         processImportFile(first);
         return;
@@ -1758,7 +2131,6 @@ function handleFiles(files) {
 
     // Media files
     const validExts = ['.mp3', '.wav', '.m4a', '.mp4', '.mkv', '.webp', '.gif', '.png', '.jpeg', '.jpg', '.svg'];
-    const imageExts = ['.webp', '.gif', '.png', '.jpeg', '.jpg', '.svg'];
     let added = false;
     for (let i = 0; i < files.length; i++) {
         const f = files[i];
@@ -1826,6 +2198,67 @@ el.volumeInput.oninput = (e) => {
     if (!isNaN(val)) updateVolume(val);
 };
 
+// URL Import Modal
+function openUrlImportModal() {
+    document.getElementById('url-import-modal').classList.add('active');
+    document.getElementById('url-import-input').value = '';
+    document.getElementById('url-import-input').focus();
+}
+
+document.getElementById('btn-url-import').onclick = openUrlImportModal;
+
+document.getElementById('url-import-btn').onclick = () => {
+    const input = document.getElementById('url-import-input').value.trim();
+    if (!input) {
+        alert("URLを入力してください。");
+        return;
+    }
+
+    try {
+        // Extract ?= parameter from URL
+        let jsonStr = '';
+        if (input.includes('?=')) {
+            const startIdx = input.indexOf('?=') + 2;
+            jsonStr = decodeURIComponent(input.substring(startIdx));
+        } else {
+            // Try parsing as raw JSON
+            jsonStr = input;
+        }
+
+        const importedQueue = JSON.parse(jsonStr);
+
+        if (Array.isArray(importedQueue) && importedQueue.length > 0) {
+            const validTypes = ['youtube', 'soundcloud', 'vimeo'];
+            const sanitized = importedQueue
+                .filter(item => item.id && validTypes.includes(item.type || 'youtube'))
+                .map(item => ({
+                    id: item.id,
+                    type: item.type || 'youtube',
+                    title: item.title || 'Untitled',
+                    author: item.author || 'Unknown',
+                    tier: item.tier || '×',
+                    lastTime: 0,
+                    duration: 0,
+                    memo: ''
+                }));
+
+            if (sanitized.length > 0) {
+                queue = [...queue, ...sanitized];
+                renderQueue();
+                alert(`${sanitized.length}曲をインポートしました。`);
+                document.getElementById('url-import-modal').classList.remove('active');
+            } else {
+                alert("インポート可能な曲が見つかりませんでした。");
+            }
+        } else {
+            alert("有効なキューデータが見つかりませんでした。");
+        }
+    } catch (e) {
+        console.error('URL Import failed:', e);
+        alert("URLの解析に失敗しました。形式を確認してください。");
+    }
+};
+
 // Shortcuts Help
 el.helpBtn.onclick = () => el.helpModal.classList.toggle('active');
 
@@ -1833,9 +2266,10 @@ function handleShortcutKey(rawK, e = null) {
     if (isLocked) return;
     const k = normalizeZenkaku(rawK);
 
-    // Unified shortcuts
     const kl = k.toLowerCase();
-    if (kl === 'g') { if (e) e.preventDefault(); mediaTogglePlay(); }
+    if (kl === 'b') { if (e) e.preventDefault(); takeScreenshot(); }
+    else if (kl === 'u') { if (e) e.preventDefault(); openUrlImportModal(); }
+    else if (kl === 'g') { if (e) e.preventDefault(); mediaTogglePlay(); }
     else if (kl === 'o') mediaStop();
     else if (kl === 'a') {
         const item = queue[currentIndex];
@@ -1865,6 +2299,26 @@ function handleShortcutKey(rawK, e = null) {
     }
     else if (kl === 'd') mediaSeek(-5);
     else if (kl === 'f') mediaSeek(-2);
+    else if (kl === 'y') {
+        if (e) e.preventDefault();
+        yPrefixCount++;
+        if (yPrefixCount > 5) {
+            yPrefixCount = 0;
+            if (el.heldKeysIndicator) el.heldKeysIndicator.style.opacity = "0";
+            return;
+        }
+        isSlashKeyPrefixActive = false;
+
+        // Y alone is 0%
+        updateVolume(0);
+
+        // Show Y prefix on indicator
+        if (el.heldKeysIndicator) {
+            el.heldKeysIndicator.innerText = "Y".repeat(yPrefixCount) + " (0%)";
+            el.heldKeysIndicator.style.opacity = "1";
+        }
+        return;
+    }
     else if (kl === 'h') mediaSeek(2);
     else if (kl === 'j') mediaSeek(5);
     else if (kl === 'k') {
@@ -1959,6 +2413,39 @@ function handleShortcutKey(rawK, e = null) {
         }
         // Consecutive 't' handled above, any other key cancels
         if (k !== 't') tPrefixCount = 0;
+    }
+
+    if (yPrefixCount > 0) {
+        const yKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '^', '\\', '¥'];
+        if (yKeys.includes(k)) {
+            if (e) e.preventDefault();
+            const volMap = {
+                '1': 1, '2': 3, '3': 5, '4': 8, '5': 15, '6': 25,
+                '7': 40, '8': 55, '9': 75, '0': 90, '-': 100
+            };
+            const currentVol = parseInt(el.volumeSlider.value);
+            let targetVol = currentVol;
+
+            if (volMap[k] !== undefined) {
+                targetVol = volMap[k];
+            } else if (k === '^') {
+                targetVol = currentVol - 5;
+            } else if (k === '\\' || k === '¥') {
+                targetVol = currentVol + 5;
+            }
+
+            updateVolume(targetVol);
+
+            // Show result on indicator briefly
+            if (el.heldKeysIndicator) {
+                const prefix = "Y".repeat(yPrefixCount);
+                el.heldKeysIndicator.innerText = `${prefix}${k} (${targetVol}%)`;
+                setTimeout(() => { if (heldKeysMap.size === 0) el.heldKeysIndicator.style.opacity = "0"; }, 500);
+            }
+            yPrefixCount = 0;
+            return;
+        }
+        if (k !== 'y') yPrefixCount = 0;
     }
 
     // Shift + Number keys for Percent Seek (Offset +1/24)
@@ -2122,12 +2609,34 @@ function updateKeyMonitor(e, type) {
     }
 
     // Update indicator
-    const heldNames = Array.from(heldKeysMap.values()).map(k => {
+    if (!isShortcutDisplayEnabled) {
+        el.heldKeysIndicator.style.opacity = "0";
+        return;
+    }
+
+    const isShiftPressed = heldKeysMap.has('ShiftLeft') || heldKeysMap.has('ShiftRight');
+
+    const heldNames = Array.from(heldKeysMap.entries()).map(([code, k]) => {
         if (k === " ") return "Space";
-        // Handle Zenkaku/Hiragana (keep as is), Alphanumeric (uppercase)
+
+        // Shift + Number keys: show '3' instead of '#' (especially for JIS)
+        if (isShiftPressed && code.startsWith('Digit')) {
+            return code.replace('Digit', '');
+        }
+
+        // Other JIS symbols when Shift is held
+        if (isShiftPressed) {
+            const jisShiftMap = {
+                'Minus': '-', 'Equal': '^', 'BracketLeft': '@', 'BracketRight': '[',
+                'Semicolon': ';', 'Quote': ':', 'Backslash': ']',
+                'IntlRo': '\\', 'IntlYen': '¥'
+            };
+            if (jisShiftMap[code]) return jisShiftMap[code];
+        }
+
         if (k.length === 1) {
             const normalized = normalizeZenkaku(k);
-            return (normalized >= 'a' && normalized <= 'z') ? normalized.toUpperCase() : k;
+            return (normalized >= 'a' && normalized <= 'z') ? normalized.toUpperCase() : normalized;
         }
         return k;
     });
@@ -2153,6 +2662,27 @@ document.addEventListener('keydown', (e) => {
 
     if (e.key === 'Escape') {
         el.helpModal.classList.toggle('active');
+        return;
+    }
+
+    // Esc + m toggle for shortcut monitor
+    if (e.key.toLowerCase() === 'm' && heldKeysMap.has('Escape')) {
+        isShortcutDisplayEnabled = !isShortcutDisplayEnabled;
+        if (!isShortcutDisplayEnabled) {
+            el.heldKeysIndicator.style.opacity = "0";
+        } else {
+            updateKeyMonitor(e, 'down'); // Refresh display
+        }
+        el.helpModal.classList.remove('active'); // Close modal if it was opened by Esc
+        e.preventDefault();
+        return;
+    }
+
+    // Esc + t toggle for clock settings
+    if (e.key.toLowerCase() === 't' && heldKeysMap.has('Escape')) {
+        openClockSettings();
+        el.helpModal.classList.remove('active'); // Close modal if it was opened by Esc
+        e.preventDefault();
         return;
     }
 
@@ -2346,10 +2876,6 @@ function mediaSeekTo(seconds) {
             const pct = Math.min(100, Math.max(0, (seconds / dur) * 100));
             el.progressBar.style.width = pct + '%';
         } else if (localVideo) {
-            localVideo.currentTime = seconds;
-        }
-    } else if (item.type === 'file') {
-        if (localVideo && !item.isImage) {
             localVideo.currentTime = seconds;
         }
     } else if (item.type === 'vimeo') {
@@ -2666,28 +3192,14 @@ Z:タイムゾーン(+0900), ZZ:タイムゾーン(+09:00)`;
 
 function openClockSettings() {
     const existing = document.getElementById('clock-settings-modal');
-    if (existing) return;
+    if (existing) {
+        existing.classList.add('active');
+        return;
+    }
 
     const modal = document.createElement('div');
     modal.id = 'clock-settings-modal';
-    Object.assign(modal.style, {
-        position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
-        background: 'rgba(0,0,0,0.8)', zIndex: '100010',
-        display: 'flex', justifyContent: 'center', alignItems: 'center'
-    });
-
-    const content = document.createElement('div');
-    Object.assign(content.style, {
-        background: 'var(--bg-panel, #222)', padding: '20px', borderRadius: '8px',
-        maxWidth: '500px', width: '90%', border: '1px solid var(--primary, #800)',
-        color: '#fff', fontFamily: 'sans-serif'
-    });
-
-    // Click propagation stop to prevent modal closing when clicking inside
-    // Using onmousedown to prevent issues with text selection/dragging triggering click on background
-    content.onmousedown = (e) => e.stopPropagation();
-    content.onclick = (e) => e.stopPropagation();
-
+    modal.className = 'help-modal';
 
     // Preset options
     const presets = [
@@ -2697,55 +3209,65 @@ function openClockSettings() {
         { label: '和暦略 (y hh:mm:ss.cccc)', val: 'y hh:mm:ss.cccc' },
         { label: '時刻のみ (hh:mm:ss.cccc)', val: 'hh:mm:ss.cccc' }
     ];
-
     const optionsHtml = presets.map(p => `<option value="${p.val}">${p.label}</option>`).join('');
 
-    content.innerHTML = `
-        <h3 style="margin-top:0; border-bottom:1px solid #555; padding-bottom:10px;">時計表示設定</h3>
-        <pre style="background:rgba(0,0,0,0.5); padding:10px; font-size:12px; overflow-x:auto;">${FORMAT_HELP_TEXT}</pre>
-        <div style="margin:15px 0;">
-            <label style="display:block; margin-bottom:5px;">プリセット選択:</label>
-            <select id="clock-fmt-preset" style="width:100%; padding:8px; background:#000; color:#fff; border:1px solid #666; margin-bottom:10px;">
-                <option value="">-- 選択してください --</option>
-                ${optionsHtml}
-            </select>
-        
-            <label style="display:block; margin-bottom:5px;">表示フォーマット (直接編集可):</label>
-            <input type="text" id="clock-fmt-ui-input" value="${currentClockFormat}" style="width:100%; padding:8px; background:#000; color:#fff; border:1px solid #666;">
-        </div>
-        <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button id="clock-fmt-save-btn" style="padding:8px 16px; background:var(--primary, #800); color:#fff; border:none; cursor:pointer;">保存</button>
-            <button id="clock-fmt-cancel-btn" style="padding:8px 16px; background:transparent; border:1px solid #666; color:#ccc; cursor:pointer;">閉じる</button>
+    modal.innerHTML = `
+        <div class="help-content" style="max-width: 500px;">
+            <h3 style="margin-top:0;">時計表示設定</h3>
+            <pre style="background:rgba(0,0,0,0.3); padding:10px; font-size:0.7rem; border-radius:6px; overflow-x:auto; color:var(--text-muted); line-height:1.2;">${FORMAT_HELP_TEXT}</pre>
+            
+            <div style="display:flex; flex-direction:column; gap:12px; margin: 1.5rem 0;">
+                <div>
+                    <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">プリセット</label>
+                    <select id="clock-fmt-preset" class="app-input" style="width:100%;">
+                        <option value="">-- 選択してください --</option>
+                        ${optionsHtml}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">フォーマット</label>
+                    <input type="text" id="clock-fmt-ui-input" class="app-input" value="${currentClockFormat}" style="width:100%; font-family:monospace;">
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button id="clock-fmt-save-btn" class="btn primary-btn" style="padding:0.5rem 1.5rem;">保存</button>
+                <button id="clock-fmt-cancel-btn" class="btn" style="padding:0.5rem 1.5rem;">閉じる</button>
+            </div>
         </div>
     `;
 
-    modal.appendChild(content);
     document.body.appendChild(modal);
+
+    // Trigger reflow for transition
+    setTimeout(() => modal.classList.add('active'), 10);
 
     const input = document.getElementById('clock-fmt-ui-input');
     const select = document.getElementById('clock-fmt-preset');
 
-    select.onchange = () => {
-        if (select.value) {
-            input.value = select.value;
-        }
-    };
+    select.onchange = () => { if (select.value) input.value = select.value; };
 
     document.getElementById('clock-fmt-save-btn').onclick = () => {
-        if (input.value) {
-            currentClockFormat = input.value;
-        }
-        modal.remove();
+        if (input.value) currentClockFormat = input.value;
+        closeClockSettings();
     };
-    document.getElementById('clock-fmt-cancel-btn').onclick = () => modal.remove();
-    // Close on background click (mousedown to be more precise/robust)
-    modal.onmousedown = (e) => {
-        if (e.target === modal) modal.remove();
-    };
+
+    document.getElementById('clock-fmt-cancel-btn').onclick = closeClockSettings;
+    modal.onclick = (e) => { if (e.target === modal) closeClockSettings(); };
+}
+
+function closeClockSettings() {
+    const modal = document.getElementById('clock-settings-modal');
+    if (modal) {
+        modal.classList.remove('active');
+        // Remove after transition
+        setTimeout(() => modal.remove(), 300);
+    }
 }
 
 function initClock() {
     const clockEl = document.getElementById('clock-display');
+    const clockHelpBtn = document.getElementById('clock-help-btn');
     if (!clockEl) return;
 
     clockEl.style.cursor = 'pointer';
@@ -2755,6 +3277,13 @@ function initClock() {
         e.stopPropagation();
         openClockSettings();
     };
+
+    if (clockHelpBtn) {
+        clockHelpBtn.onclick = (e) => {
+            e.stopPropagation();
+            openClockSettings();
+        };
+    }
 
     function update() {
         const now = new Date();
@@ -2959,4 +3488,54 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', migrateTiers);
 } else {
     setTimeout(migrateTiers, 500); // Wait for other inits
+}
+
+// URL Parameter Queue Import
+function initFromUrlParams() {
+    try {
+        const urlParams = window.location.search;
+        // Check for ?= format
+        if (urlParams.startsWith('?=')) {
+            const encoded = urlParams.substring(2); // Remove "?="
+            const decoded = decodeURIComponent(encoded);
+            const importedQueue = JSON.parse(decoded);
+
+            if (Array.isArray(importedQueue) && importedQueue.length > 0) {
+                // Validate and sanitize imported items
+                const validTypes = ['youtube', 'soundcloud', 'vimeo'];
+                const sanitized = importedQueue
+                    .filter(item => item.id && validTypes.includes(item.type || 'youtube'))
+                    .map(item => ({
+                        id: item.id,
+                        type: item.type || 'youtube',
+                        title: item.title || 'Untitled',
+                        author: item.author || 'Unknown',
+                        tier: item.tier || '×',
+                        lastTime: 0,
+                        duration: 0,
+                        memo: ''
+                    }));
+
+                if (sanitized.length > 0) {
+                    queue = [...queue, ...sanitized];
+                    if (typeof renderQueue === 'function') renderQueue();
+                    console.log(`Imported ${sanitized.length} tracks from URL`);
+
+                    // Clean URL after import (optional, remove query string)
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error('Failed to parse URL params:', e);
+    }
+}
+
+// Run URL import on load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFromUrlParams);
+} else {
+    setTimeout(initFromUrlParams, 100);
 }

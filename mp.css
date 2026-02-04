@@ -1000,6 +1000,43 @@ input {
     box-sizing: border-box;
 }
 
+/* Google Search Modal specific */
+.search-modal-content {
+    width: 90%;
+    max-width: 800px;
+    height: 80%;
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.search-bar {
+    height: 40px;
+    background: #f1f3f4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 15px;
+    border-bottom: 1px solid #ddd;
+    color: #3c4043;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #5f6368;
+}
+
+.close-btn:hover {
+    color: #000;
+}
+
 .utaten-container iframe {
     width: 100%;
     height: calc(100% - 30px);
@@ -1007,40 +1044,68 @@ input {
 }
 
 /* Clock Display */
-.clock-display {
+/* Clock Group Unit (Combined) */
+.clock-group {
     position: fixed;
+    top: 15px;
+    left: 20px;
     z-index: 5000;
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 2px 4px 2px 14px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+}
+
+.clock-group:hover {
+    border-color: var(--primary);
+}
+
+.clock-display {
     font-family: 'Outfit', monospace;
     font-weight: bold;
     color: var(--text-main);
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    padding: 5px 12px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    pointer-events: none;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    font-size: 1.4rem;
     letter-spacing: 1px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    padding-right: 8px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 140px;
+    /* 文字列の長さ変化によるガタつきを防止 */
+    text-align: right;
+    white-space: nowrap;
 }
 
-/* PC: Top Left */
-@media (min-width: 769px) {
-    .clock-display {
-        top: 15px;
-        left: 20px;
-        font-size: 1.5rem;
-    }
+#clock-help-btn {
+    background: transparent;
+    border: none;
+    color: var(--primary);
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    border-radius: 50%;
 }
 
-/* Mobile: Top Center (Prominent) */
+#clock-help-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--on-primary);
+}
+
+/* Position Stability (Fixed Top-Left) */
 @media (max-width: 768px) {
-    .clock-display {
+    .clock-group {
         top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 1.8rem;
-        padding: 8px 16px;
-        background: rgba(0, 0, 0, 0.6);
-        border-bottom: 2px solid var(--primary);
+        left: 10px;
+        transform: scale(0.85);
+        transform-origin: top left;
     }
 }

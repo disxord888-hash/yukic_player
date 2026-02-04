@@ -12,50 +12,145 @@
 </head>
 
 <body>
-    <div id="clock-display" class="clock-display"></div>
+    <!-- Browser Compatibility Warning -->
+    <div id="browser-warning"
+        style="display:none; position:fixed; top:0; left:0; right:0; z-index:99999; background:linear-gradient(135deg, #ff6b6b, #ee5a24); color:#fff; padding:10px 40px 10px 15px; font-size:0.85rem; text-align:center; box-shadow:0 2px 10px rgba(0,0,0,0.3);">
+        ⚠️ このプレイヤーは <strong>Google Chrome</strong> に最適化されています。他のブラウザではほぼ機能しません。
+        <button onclick="this.parentElement.style.display='none'"
+            style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">×</button>
+    </div>
+    <script>
+        // Show warning for non-Chrome browsers
+        (function () {
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            if (!isChrome) {
+                document.getElementById('browser-warning').style.display = 'block';
+            }
+        })();
+    </script>
+
+    <div class="clock-group">
+        <div id="clock-display" class="clock-display"></div>
+        <button id="clock-help-btn" class="help-btn" title="Shortcuts">▼</button>
+    </div>
+
+    <div id="search-modal" class="help-modal">
+        <div class="search-modal-content">
+            <div class="search-bar">
+                <span id="search-url-text">Searching Google...</span>
+                <button onclick="document.getElementById('search-modal').classList.remove('active')"
+                    class="close-btn">×</button>
+            </div>
+            <div
+                style="flex:1; display:flex; flex-direction:column; background:#fff; align-items:center; justify-content:center; position:relative;">
+                <div id="search-fallback"
+                    style="display:none; position:absolute; inset:0; z-index:10; background:#fff; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:20px; text-align:center;">
+                    <div style="color:#5f6368; font-size:1.1rem; font-weight:bold;">Googleで直接検索</div>
+                    <button id="search-open-btn" class="btn primary-btn"
+                        style="padding:15px 40px; font-size:1.2rem; border-radius:30px; box-shadow:0 4px 10px rgba(0,0,0,0.2);">
+                        G 検索を開く
+                    </button>
+                    <div style="font-size:0.8rem; color:#999; max-width:300px;">
+                        Googleは埋め込み表示を制限しているため、上のボタンから別タブで開く必要があります。
+                    </div>
+                </div>
+                <iframe src="" id="search-iframe"
+                    style="width:100%; height:100%; border:none; background:#fff;"></iframe>
+            </div>
+        </div>
+    </div>
 
     <!-- Help Button / Modal -->
     <!-- Top Right Controls -->
     <div class="top-right-group">
         <input type="text" id="shortcut-input" class="shortcut-input" placeholder="Cmd→" maxlength="1">
-        <button id="btn-utaten" class="help-btn" title="UtaTen/Lyrics"
-            style="color: #ff5e5e; border-color: #ff5e5e;">歌</button>
+        <button id="btn-share-link" class="help-btn" title="Share via GitHub Link"
+            style="color: #3b82f6; border-color: #3b82f6;">🔗</button>
+        <button id="btn-screenshot" class="help-btn" title="Take Screenshot"
+            style="color: #4ade80; border-color: #4ade80;">📸</button>
         <button id="help-btn" class="help-btn" title="Shortcuts">▼</button>
     </div>
 
-    <!-- UtaTen Container -->
-    <div id="utaten-container" class="utaten-container">
-        <div class="utaten-bar">
-            <span>UtaTen Link</span>
-            <button onclick="document.getElementById('utaten-container').style.display='none'"
-                style="cursor:pointer; background:none; border:none; font-size:1.2rem;">×</button>
-        </div>
-        <iframe src="https://utaten.com/" id="utaten-frame"></iframe>
-    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <div id="help-modal" class="help-modal">
         <div class="help-content">
             <h3>ショートカットキー</h3>
             <ul class="help-list">
-                <li><span>A / S / D / F</span> |← / ●← / -5s / -2s</li>
+                <li><span>A / S / D / F</span> -1/36 / -1/72 / -5s / -2s</li>
                 <li><span>G</span> 再生 / 一時停止</li>
-                <li><span>H / J / K / L</span> +2s / +5s / →● / →|</li>
+                <li><span>H / J / K / L</span> +2s / +5s / +1/72 / +1/36</li>
                 <li><span>Z / X / C / V</span> 最初 / 前曲 / 次曲 / 最後</li>
-                <li><span>:</span> タイムスタンプ入力 (T1...|comment:[])</li>
-                <li><span>Shift + T</span> タイムスタンプ一覧表示 / ジャンプ</li>
+                <li><span>\ (¥) / ,</span> 最後へ移動 / 指定秒数へシーク</li>
+                <li><span>: (;)</span> タイムスタンプ入力 (T1...:[])</li>
+                <li><span>Shift + T</span> タイムスタンプ一覧表示</li>
                 <li><span>Shift + [1-0, -, ^]</span> 指定位置(%)シーク (/や\併用可)</li>
+                <li><span>Y [+ 1-0... / \ / ^]</span> 音量調整 (Y単体で0%)</li>
+                <li><span>Esc + M</span> ショートカットモニター表示切替</li>
                 <li><span>Q / E / W</span> ループ / 全体ループ / シャッフル</li>
-                <li><span>Shift + A</span> すべて選択</li>
                 <li><span>[ / ]</span> 選択項目を 複製 / 削除</li>
-                <li><span>↑ / ↓</span> 音量調整</li>
-                <li><span>ESC</span> ヘルプ閉じる</li>
+                <li><span>B</span> 画面保存 (📸)</li>
+                <li><span>U</span> URLインポート (🔗)</li>
+                <li><span>↑ / ↓</span> 音量調整 (±5%)</li>
             </ul>
             <div
-                style="font-size: 0.75rem; border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.5rem; color: var(--text-muted);">
-                <strong>数値キー対応 (Shift + Key):</strong><br>
-                1: 0% | 2: 8% | 3: 16% | 4: 25% | 5: 33% | 6: 41%<br>
-                7: 50% | 8: 58% | 9: 66% | 0: 75% | -: 83% | ^: 91%
+                style="font-size: 0.7rem; border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.5rem; color: var(--text-muted); line-height: 1.4;">
+                <strong>音量調整 (Yプレフィックス):</strong><br>
+                1:1% | 2:3% | 3:5% | 4:8% | 5:15% | 6:25%<br>
+                7:40% | 8:55% | 9:75% | 0:90% | -:100% | ^:-5% | \:+5%<br>
+                <strong>シーク位置 (Shift + Key):</strong> 1:0% 〜 ^:91% (1/12刻み)<br>
+                / 併用で+2.7%(+1/36)、\ 併用で+5.5%(+2/36) オフセット
             </div>
             <button onclick="document.getElementById('help-modal').classList.remove('active')" class="btn">閉じる</button>
+        </div>
+    </div>
+
+    <!-- URL Import Modal -->
+    <div id="url-import-modal" class="help-modal">
+        <div class="help-content" style="max-width:500px;">
+            <h3 style="margin-top:0;">🔗 URL Import</h3>
+            <div
+                style="background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:6px; padding:0.5rem; margin-bottom:1rem; font-size:0.75rem; color:#ff8888;">
+                ⚠️ <strong>Chrome推奨</strong>：このプレイヤーはChrome以外のブラウザではほぼ機能しません。
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;">
+                共有されたURLを貼り付けてキューをインポートします。
+            </p>
+            <textarea id="url-import-input" class="app-input" placeholder="https://...?=[...] 形式のURLを貼り付け"
+                style="width:100%; height:120px; font-family:monospace; font-size:0.8rem; resize:vertical;"></textarea>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:1rem;">
+                <button id="url-import-btn" class="btn primary-btn">インポート</button>
+                <button onclick="document.getElementById('url-import-modal').classList.remove('active')"
+                    class="btn">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Link Modal -->
+    <div id="share-link-modal" class="help-modal">
+        <div class="help-content" style="max-width:550px;">
+            <h3 style="margin-top:0;">🔗 共有リンク生成</h3>
+            <div
+                style="background:rgba(255,100,100,0.15); border:1px solid rgba(255,100,100,0.3); border-radius:6px; padding:0.5rem; margin-bottom:1rem; font-size:0.75rem; color:#ff8888;">
+                ⚠️ <strong>Chrome推奨</strong>：このプレイヤーはChrome以外のブラウザではほぼ機能しません。
+            </div>
+            <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.5rem;">
+                YouTube / SoundCloud / Vimeo の曲のみ共有できます（ローカルファイルは除外）。
+            </p>
+            <div style="display:flex; gap:0.5rem; margin-bottom:1rem; flex-wrap:wrap;">
+                <button id="share-github-btn" class="btn" style="flex:1; min-width:120px;">GitHub Pages用</button>
+                <button id="share-local-btn" class="btn" style="flex:1; min-width:120px;">localhost用</button>
+            </div>
+            <div style="position:relative;">
+                <textarea id="share-link-output" class="app-input" readonly placeholder="生成されたリンクがここに表示されます"
+                    style="width:100%; height:100px; font-family:monospace; font-size:0.75rem; resize:vertical;"></textarea>
+                <button id="share-copy-btn" class="btn"
+                    style="position:absolute; top:5px; right:5px; padding:0.3rem 0.6rem; font-size:0.75rem;">コピー</button>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:1rem;">
+                <button onclick="document.getElementById('share-link-modal').classList.remove('active')"
+                    class="btn">閉じる</button>
+            </div>
         </div>
     </div>
 
@@ -164,6 +259,8 @@
                     </select>
                     <button id="btn-export" class="btn">Export</button>
                     <button id="btn-import" class="btn">Import</button>
+                    <button id="btn-url-import" class="btn" style="color:#3b82f6; border-color:#3b82f6;"
+                        title="URL Import">URL<small>U</small></button>
                     <button id="btn-lock" class="btn lock-btn">
                         <div class="lock-visual-container mini">
                             <svg class="lock-svg" width="40" height="40">
@@ -180,7 +277,8 @@
                 <div class="audio-effects add-section"
                     style="padding: 0.75rem; border-top: 1px solid var(--border); margin-top: 1rem;">
                     <div class="audio-row" style="display: flex; align-items: center; gap: 1rem;">
-                        <label style="font-size: 0.85rem; color: var(--text-muted); min-width: 80px;">🔉 Volume</label>
+                        <label style="font-size: 0.85rem; color: var(--text-muted); min-width: 80px;">🔉
+                            Volume</label>
                         <input type="range" id="volume-slider" min="0" max="100" step="1" value="100"
                             style="flex: 1; accent-color: var(--primary);">
                         <input type="number" id="volume-input" min="0" max="100" value="100"
@@ -272,6 +370,7 @@
 
     <script src="https://w.soundcloud.com/player/api.js"></script>
     <script src="https://player.vimeo.com/api/player.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="mp.js"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
 </body>
