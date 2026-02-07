@@ -977,12 +977,16 @@ function renderQueue() {
             isDraggingQueueItem = false;
             e.target.classList.remove('dragging');
         };
-        li.ondragover = (e) => e.preventDefault();
+        li.ondragover = (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+        };
         li.ondrop = (e) => {
             const qIdx = e.dataTransfer.getData('application/x-player-queue-idx');
             if (qIdx !== "") {
                 e.preventDefault();
                 e.stopPropagation();
+                isDraggingQueueItem = false;
                 const fromIdx = parseInt(qIdx);
                 const toIdx = i;
                 if (!isNaN(fromIdx) && fromIdx !== toIdx) {
@@ -2325,7 +2329,12 @@ document.body.appendChild(dropOverlay);
 
 let dragCounter = 0;
 document.addEventListener('dragenter', (e) => {
-    if (isDraggingQueueItem) return;
+    const types = e.dataTransfer.types;
+    const isInternal = isDraggingQueueItem || (types && (Array.from(types).includes('application/x-player-queue-idx')));
+    if (isInternal) {
+        isDraggingQueueItem = true;
+        return;
+    }
     e.preventDefault();
     e.stopPropagation();
     dragCounter++;
@@ -2344,15 +2353,25 @@ document.addEventListener('dragleave', (e) => {
 });
 
 document.addEventListener('dragover', (e) => {
-    if (isDraggingQueueItem) return;
+    const types = e.dataTransfer.types;
+    const isInternal = isDraggingQueueItem || (types && (Array.from(types).includes('application/x-player-queue-idx')));
+    if (isInternal) {
+        e.dataTransfer.dropEffect = 'move';
+        return;
+    }
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
 });
 
 document.addEventListener('drop', (e) => {
-    if (isDraggingQueueItem) {
+    const types = e.dataTransfer.types;
+    const isInternal = isDraggingQueueItem || (types && (Array.from(types).includes('application/x-player-queue-idx')));
+
+    if (isInternal) {
         isDraggingQueueItem = false;
+        // The actual reorder is handled by li.ondrop
+        // If we got here, it's a drop outside an li
         return;
     }
     e.preventDefault();
@@ -2366,10 +2385,8 @@ document.addEventListener('drop', (e) => {
         return;
     }
 
-    // Try to get text/URL data (for dragged links)
     const text = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
     if (text) {
-        // Drop might contain multiple lines if it's a list, but usually it's one link
         const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
         for (const line of lines) {
             addToQueue(line);
