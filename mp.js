@@ -248,6 +248,8 @@ const el = {
     helpModal: document.getElementById('help-modal'),
     heldKeysIndicator: document.getElementById('held-keys-indicator'),
     presetSelect: document.getElementById('preset-select'),
+    btnChangeThumb: document.getElementById('btn-change-thumb'),
+    thumbInput: document.getElementById('thumb-input'),
     localThumb: null // For dynamically assigned local thumbnail
 };
 const announcementTimes = document.querySelectorAll('.ann-time');
@@ -979,7 +981,11 @@ function renderQueue() {
         };
         li.ondragover = (e) => {
             e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
+            if (e.dataTransfer.types.includes('Files')) {
+                e.dataTransfer.dropEffect = 'copy';
+            } else {
+                e.dataTransfer.dropEffect = 'move';
+            }
         };
         li.ondrop = (e) => {
             const qIdx = e.dataTransfer.getData('application/x-player-queue-idx');
@@ -996,6 +1002,32 @@ function renderQueue() {
                     currentIndex = playingId ? queue.findIndex(it => it.id === playingId) : -1;
                     selectedListIndex = -1;
                     renderQueue();
+                }
+            } else {
+                // Maybe an image for thumbnail
+                const files = e.dataTransfer.files;
+                if (files && files.length === 1) {
+                    const f = files[0];
+                    const lower = f.name.toLowerCase();
+                    const imageExts = ['.webp', '.gif', '.png', '.jpeg', '.jpg', '.svg'];
+                    if (imageExts.some(ext => lower.endsWith(ext))) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const reader = new FileReader();
+                        reader.onload = (re) => {
+                            queue[i].thumbnail = re.target.result;
+                            if (currentIndex === i) {
+                                if (localImage) {
+                                    localImage.src = queue[i].thumbnail;
+                                    localImage.style.display = 'block';
+                                    localImage.style.zIndex = "5";
+                                }
+                                applyTierTheme(queue[i].tier || '');
+                            }
+                            renderQueue();
+                        };
+                        reader.readAsDataURL(f);
+                    }
                 }
             }
         };
@@ -2446,6 +2478,30 @@ function handleFiles(files) {
             if (imageExts.some(ext => lowerName.endsWith(ext))) {
                 item.isImage = true;
                 item.duration = 5; // Default 5s for images
+            } else if (f.type.startsWith('audio/') || lowerName.endsWith('.mp3') || lowerName.endsWith('.m4a')) {
+                // Try to get metadata using jsmediatags
+                if (typeof jsmediatags !== 'undefined') {
+                    jsmediatags.read(f, {
+                        onSuccess: function (tag) {
+                            const tags = tag.tags;
+                            if (tags.title) item.title = tags.title;
+                            if (tags.artist) item.author = tags.artist;
+                            if (tags.picture) {
+                                const { data, format } = tags.picture;
+                                let base64String = "";
+                                for (let j = 0; j < data.length; j++) {
+                                    base64String += String.fromCharCode(data[j]);
+                                }
+                                item.thumbnail = `data:${format};base64,${window.btoa(base64String)}`;
+                            }
+                            renderQueue();
+                            syncCurrentInfo();
+                        },
+                        onError: function (error) {
+                            console.warn("jsmediatags error", error);
+                        }
+                    });
+                }
             }
             queue.push(item);
             added = true;
@@ -4042,3 +4098,83 @@ async function triggerAlarm() {
 
 // Reset trigger flag when minute changes (if we wanted repeating alarm)
 // For now, it disables itself, so no need.
+// Final Sync Logic: Save manual edits back to queue
+if (el.nowTitle) {
+    el.nowTitle.oninput = () => {
+        if (currentIndex >= 0 && queue[currentIndex]) {
+            let val = el.nowTitle.value;
+            // Handle [Tier] Title format if present
+            const match = val.match(/^\[(.*?)\]\s*(.*)$/);
+            if (match) {
+                queue[currentIndex].title = match[2];
+                if (match[1] !== queue[currentIndex].tier) {
+                    queue[currentIndex].tier = match[1];
+                    if (el.nowTier) el.nowTier.value = match[1];
+                    applyTierTheme(match[1]);
+                }
+            } else {
+                queue[currentIndex].title = val;
+            }
+            renderQueue();
+        }
+    };
+}
+if (el.nowAuthor) {
+    el.nowAuthor.oninput = () => {
+        if (currentIndex >= 0 && queue[currentIndex]) {
+            queue[currentIndex].author = el.nowAuthor.value;
+            renderQueue();
+        }
+    };
+}
+if (el.nowMemo) {
+    el.nowMemo.addEventListener('input', () => {
+        if (currentIndex >= 0 && queue[currentIndex]) {
+            queue[currentIndex].memo = el.nowMemo.value;
+        }
+    });
+}
+if (el.nowTier) {
+    el.nowTier.onchange = () => {
+        if (currentIndex >= 0 && queue[currentIndex]) {
+            queue[currentIndex].tier = el.nowTier.value;
+            applyTierTheme(queue[currentIndex].tier);
+            syncCurrentInfo();
+            renderQueue();
+        }
+    };
+}
+if (el.nowId) {
+    el.nowId.oninput = () => {
+        if (currentIndex >= 0 && queue[currentIndex]) {
+            if (queue[currentIndex].type === 'youtube') {
+                queue[currentIndex].id = extractId(el.nowId.value) || el.nowId.value;
+            } else {
+                queue[currentIndex].id = el.nowId.value;
+            }
+            renderQueue();
+        }
+    };
+}
+
+// Manual Thumbnail Setting
+if (el.btnChangeThumb && el.thumbInput) {
+    el.btnChangeThumb.onclick = () => el.thumbInput.click();
+    el.thumbInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file && currentIndex >= 0) {
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                queue[currentIndex].thumbnail = re.target.result;
+                if (localImage) {
+                    localImage.src = queue[currentIndex].thumbnail;
+                    localImage.style.display = 'block';
+                    localImage.style.zIndex = "5";
+                }
+                renderQueue();
+                e.target.value = ''; // Reset
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+}

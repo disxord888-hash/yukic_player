@@ -303,7 +303,11 @@
                     <input type="text" id="now-author" class="info-input" placeholder="Artist">
                     <textarea id="now-memo" class="info-input" placeholder="Memo" rows="1"
                         style="color: var(--text-muted); font-size: 0.9rem; resize: vertical; min-height: 2em;"></textarea>
-                    <input type="text" id="now-id" class="info-input" placeholder="Video ID / URL">
+                    <div style="display:flex; gap:0.5rem; align-items:center;">
+                        <input type="text" id="now-id" class="info-input" placeholder="Video ID / URL" style="flex:1;">
+                        <button id="btn-change-thumb" class="btn small-btn" title="Set Thumbnail">🖼️</button>
+                    </div>
+                    <input type="file" id="thumb-input" style="display:none;" accept="image/*">
                 </div>
 
                 <!-- Row 1: Z X C V -->
@@ -461,6 +465,7 @@
     <script src="https://w.soundcloud.com/player/api.js"></script>
     <script src="https://player.vimeo.com/api/player.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
     <script src="mp.js"></script>
     <script src="https://www.youtube.com/iframe_api"></script>
 </body>
