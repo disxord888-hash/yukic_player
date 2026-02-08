@@ -441,7 +441,10 @@ function shortenUrl(u) {
 
 function extractId(u) {
     if (!u) return null;
-    if (u.length === 11) return u;
+    // Strictly match YouTube ID pattern: 11 characters of a-z, A-Z, 0-9, _, -
+    const idPattern = /^[a-zA-Z0-9_-]{11}$/;
+    if (idPattern.test(u)) return u;
+
     if (u.includes('/shorts/')) return u.split('/shorts/')[1]?.split(/[?&]/)[0];
     const m = u.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|music\.youtube\.com\/watch\?v=)([^#&?]*).*/);
     return (m && m[2].length === 11) ? m[2] : null;
@@ -541,7 +544,8 @@ async function searchYoutube(query) {
         const results = [];
 
         // Match ytInitialData (it can be var, window.ytInitialData, window['ytInitialData'])
-        const initialDataMatch = html.match(/(?:var|window\[['"]ytInitialData['"]\]|window\.ytInitialData)\s*=\s*({.*?});/);
+        // Use [\s\S]*? to match across newlines
+        const initialDataMatch = html.match(/(?:var|window\[['"]ytInitialData['"]\]|window\.ytInitialData)\s*=\s*({[\s\S]*?});/);
         if (initialDataMatch) {
             try {
                 const data = JSON.parse(initialDataMatch[1]);
@@ -642,28 +646,40 @@ function showSearchSelectionModal(results, query, onSelect) {
     modal.className = 'help-modal active';
     modal.style.zIndex = "6000";
 
-    let itemsHtml = results.map(item => `
-        <div class="ts-list-item" onclick="this.parentElement.parentElement.parentElement.remove(); window.onSearchSelect('${item.id}', '${item.title.replace(/'/g, "\\'")}','${item.author.replace(/'/g, "\\'")}');">
+    const content = document.createElement('div');
+    content.className = 'help-content ts-list-content';
+    content.style.maxWidth = '600px';
+    content.innerHTML = `<h3 style="margin-bottom:1rem;">Search: "${safe(query)}"</h3>`;
+
+    const listContainer = document.createElement('div');
+    listContainer.className = 'ts-list-container';
+
+    results.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'ts-list-item';
+        row.innerHTML = `
             <img src="https://i.ytimg.com/vi/${item.id}/default.jpg" style="width:60px; height:auto; border-radius:4px;">
             <div style="flex:1; overflow:hidden;">
                 <div class="q-title" style="white-space:nowrap; text-overflow:ellipsis; overflow:hidden;">${safe(item.title)}</div>
                 <div class="q-author">${safe(item.author)}</div>
             </div>
-        </div>
-    `).join('');
+        `;
+        row.onclick = () => {
+            modal.remove();
+            onSelect(item);
+        };
+        listContainer.appendChild(row);
+    });
 
-    window.onSearchSelect = (id, title, author) => {
-        onSelect({ id, title, author });
-        delete window.onSearchSelect;
-    };
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn';
+    cancelBtn.style.cssText = 'margin-top:1rem; width:100%;';
+    cancelBtn.innerText = 'Cancel';
+    cancelBtn.onclick = () => modal.remove();
 
-    modal.innerHTML = `
-        <div class="help-content ts-list-content" style="max-width:600px;">
-            <h3 style="margin-bottom:1rem;">Search: "${safe(query)}"</h3>
-            <div class="ts-list-container">${itemsHtml}</div>
-            <button onclick="this.parentElement.parentElement.remove()" class="btn" style="margin-top:1rem; width:100%;">Cancel</button>
-        </div>
-    `;
+    content.appendChild(listContainer);
+    content.appendChild(cancelBtn);
+    modal.appendChild(content);
     document.body.appendChild(modal);
 }
 
@@ -1970,11 +1986,13 @@ el.addUrl.oninput = () => {
     }
 };
 
-el.addUrl.onkeydown = (e) => {
-    if (e.key === 'Enter') {
-        document.getElementById('btn-add').click();
-    }
-};
+if (el.addUrl) {
+    el.addUrl.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.isComposing) {
+            document.getElementById('btn-add').click();
+        }
+    };
+}
 const copySelection = () => {
     let indices = Array.from(selectedIndices).filter(idx => idx >= 0 && idx < queue.length);
     if (indices.length === 0) {
