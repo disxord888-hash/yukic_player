@@ -102,6 +102,8 @@
                 <li><span>Shift + [1-0, -, ^]</span> 指定位置(%)シーク (/や\併用可)</li>
                 <li><span>Y [+ 1-0... / \ / ^]</span> 音量調整 (Y単体で0%)</li>
                 <li><span>Esc + M</span> ショートカットモニター表示切替</li>
+                <li><span>Shift + / (?)</span> Web検索 (Google)</li>
+                <li><span>Ctrl + F</span> キュー内検索</li>
                 <li><span>Q / E / W</span> ループ / 全体ループ / シャッフル</li>
                 <li><span>[ / ]</span> 選択項目を 複製 / 削除</li>
                 <li><span>B</span> 画面保存 (📸)</li>
@@ -441,6 +443,8 @@
                     <span id="queue-status" style="font-size: 0.7rem; opacity: 0.6;">0 / 32767</span>
                 </div>
                 <div class="header-actions">
+                    <input type="text" id="queue-search" class="app-input small-input" placeholder="Search queue..."
+                        style="width: 120px; padding: 0.2rem 0.5rem; font-size: 0.8rem; height: 30px;">
                     <select id="sort-mode" class="btn small-btn sort-select"
                         style="padding: 0.2rem 0.4rem; min-width: 70px;">
                         <option value="manual">手動</option>

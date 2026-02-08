@@ -248,8 +248,12 @@ const el = {
     helpModal: document.getElementById('help-modal'),
     heldKeysIndicator: document.getElementById('held-keys-indicator'),
     presetSelect: document.getElementById('preset-select'),
-    btnChangeThumb: document.getElementById('btn-change-thumb'),
-    thumbInput: document.getElementById('thumb-input'),
+    queueSearch: document.getElementById('queue-search'),
+    searchModal: document.getElementById('search-modal'),
+    searchIframe: document.getElementById('search-iframe'),
+    searchUrlText: document.getElementById('search-url-text'),
+    searchFallback: document.getElementById('search-fallback'),
+    searchOpenBtn: document.getElementById('search-open-btn'),
     localThumb: null // For dynamically assigned local thumbnail
 };
 const announcementTimes = document.querySelectorAll('.ann-time');
@@ -523,47 +527,79 @@ async function searchYoutube(query) {
 
     try {
         const results = [];
-        // Find all videoRenderer starts
-        const videoMatches = [...html.matchAll(/"videoRenderer"\s*:\s*\{/g)];
-        const indices = videoMatches.map(m => m.index);
 
-        for (let i = 0; i < indices.length; i++) {
-            const start = indices[i];
-            const end = (i < indices.length - 1) ? indices[i + 1] : html.length;
-            const block = html.substring(start, end);
+        // Try to parse ytInitialData if present (more reliable)
+        const initialDataMatch = html.match(/var ytInitialData\s*=\s*({.*?});/);
+        if (initialDataMatch) {
+            try {
+                const data = JSON.parse(initialDataMatch[1]);
+                const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+                if (contents) {
+                    const itemSection = contents.find(c => c.itemSectionRenderer);
+                    const videos = itemSection?.itemSectionRenderer?.contents;
+                    if (videos) {
+                        for (const v of videos) {
+                            const video = v.videoRenderer;
+                            if (!video) continue;
 
-            // Extract Video ID
-            const idMatch = block.match(/"videoId"\s*:\s*"([^"]+)"/);
-            if (!idMatch) continue;
-            const id = idMatch[1];
+                            const id = video.videoId;
+                            const title = video.title?.runs?.[0]?.text || video.title?.simpleText || "Unknown Title";
+                            const author = video.ownerText?.runs?.[0]?.text || video.shortBylineText?.runs?.[0]?.text || "Unknown Artist";
 
-            // Shorts Check
-            if (block.includes('"overlayStyle":"SHORTS"') || block.includes('"style":"SHORTS"') || block.includes('video-shorts-')) continue;
+                            // Shorts check
+                            const isShort = video.title?.runs?.some(r => r.text.toLowerCase().includes('#shorts')) ||
+                                video.viewCountText?.simpleText?.includes('shorts');
+                            if (isShort && !isShortVideoAllowed) continue;
 
-            // Extract Title - looks for "text":"..." inside a "title":{...}
-            let title = "Unknown Title";
-            const tMatch = block.match(/"title"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            if (tMatch) {
-                title = decodeChars(tMatch[1]);
+                            results.push({ id, title: decodeChars(title), author: decodeChars(author) });
+                            if (results.length >= 5) break;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('ytInitialData parse failed, falling back to regex:', e);
             }
-
-            if (title.toLowerCase().includes('#shorts')) continue;
-
-            // Extract Author - looks for "text":"..." inside byline/owner keys
-            let author = "Unknown Artist";
-            const aMatch = block.match(/"(?:longBylineText|ownerText|shortBylineText|ownerTitle|bylineText)"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            if (aMatch) {
-                author = decodeChars(aMatch[1]);
-            }
-
-            results.push({ id, title, author });
-            if (results.length >= 3) break;
         }
 
-        // Fallback for ID only if nothing found
+        if (results.length === 0) {
+            // Fallback regex approach
+            const videoMatches = [...html.matchAll(/"videoRenderer"\s*:\s*\{/g)];
+            const indices = videoMatches.map(m => m.index);
+
+            for (let i = 0; i < indices.length; i++) {
+                const start = indices[i];
+                const end = (i < indices.length - 1) ? indices[i + 1] : html.length;
+                const block = html.substring(start, end);
+
+                const idMatch = block.match(/"videoId"\s*:\s*"([^"]+)"/);
+                if (!idMatch) continue;
+                const id = idMatch[1];
+
+                if (block.includes('"overlayStyle":"SHORTS"') || block.includes('"style":"SHORTS"') || block.includes('video-shorts-')) continue;
+
+                let title = "Unknown Title";
+                const tMatch = block.match(/"title"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                if (tMatch) {
+                    title = decodeChars(tMatch[1]);
+                }
+
+                if (title.toLowerCase().includes('#shorts') && !isShortVideoAllowed) continue;
+
+                let author = "Unknown Artist";
+                const aMatch = block.match(/"(?:longBylineText|ownerText|shortBylineText|ownerTitle|bylineText)"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+                if (aMatch) {
+                    author = decodeChars(aMatch[1]);
+                }
+
+                results.push({ id, title, author });
+                if (results.length >= 5) break;
+            }
+        }
+
+        // Final fallback for ID only
         if (results.length === 0) {
             const idMatches = [...html.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)];
-            const uniqueIds = [...new Set(idMatches.map(m => m[1]))].slice(0, 3);
+            const uniqueIds = [...new Set(idMatches.map(m => m[1]))].slice(0, 5);
             return uniqueIds.map(id => ({ id, title: `Video (${id})`, author: "YouTube" }));
         }
 
@@ -572,6 +608,31 @@ async function searchYoutube(query) {
         console.warn('YouTube search parse failed:', e);
     }
     return [];
+}
+
+async function openWebSearch(query) {
+    if (!el.searchModal) return;
+
+    const engineUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1`;
+    const fallbackUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+
+    el.searchUrlText.innerText = `Searching Google: "${query}"`;
+    el.searchIframe.src = engineUrl;
+    el.searchModal.classList.add('active');
+
+    if (el.searchOpenBtn) {
+        el.searchOpenBtn.onclick = () => window.open(fallbackUrl, '_blank');
+    }
+
+    // Check if iframe is blocked (X-Frame-Options)
+    // We can't strictly check but we show the fallback after a delay
+    el.searchFallback.style.display = 'none';
+    setTimeout(() => {
+        // If the user is still on the modal, show the fallback button just in case
+        if (el.searchModal.classList.contains('active')) {
+            el.searchFallback.style.display = 'flex';
+        }
+    }, 2000);
 }
 
 function showSearchSelectionModal(results, query, onSelect) {
@@ -894,7 +955,18 @@ function getTierColorClass(tier) {
 function renderQueue() {
     const frag = document.createDocumentFragment();
     el.queueList.innerHTML = '';
+
+    const searchTerm = el.queueSearch?.value.toLowerCase() || '';
+
     queue.forEach((item, i) => {
+        // Filter logic
+        if (searchTerm) {
+            const matchesTitle = item.title?.toLowerCase().includes(searchTerm);
+            const matchesAuthor = item.author?.toLowerCase().includes(searchTerm);
+            const matchesMemo = item.memo?.toLowerCase().includes(searchTerm);
+            if (!matchesTitle && !matchesAuthor && !matchesMemo) return;
+        }
+
         const li = document.createElement('li');
         li.className = `queue-item ${i === currentIndex ? 'active' : ''} ${selectedIndices.has(i) ? 'selected' : ''}`;
         li.setAttribute('data-idx', i);
@@ -3041,7 +3113,26 @@ document.addEventListener('keydown', (e) => {
     updateKeyMonitor(e, 'down');
 
     if (e.key === 'Escape') {
-        el.helpModal.classList.toggle('active');
+        el.helpModal.classList.remove('active');
+        if (el.searchModal) el.searchModal.classList.remove('active');
+        return;
+    }
+
+    // Ctrl + F for queue search
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        if (el.queueSearch) {
+            e.preventDefault();
+            el.queueSearch.focus();
+            el.queueSearch.select();
+        }
+        return;
+    }
+
+    // ? key (Shift + /) for web search
+    if (e.shiftKey && (e.key === '?' || e.key === '/')) {
+        const query = prompt("Googleで検索:");
+        if (query) openWebSearch(query);
+        e.preventDefault();
         return;
     }
 
@@ -4157,20 +4248,21 @@ if (el.nowId) {
     };
 }
 
+// Queue Search Event
+if (el.queueSearch) {
+    el.queueSearch.oninput = () => renderQueue();
+}
+
 // Manual Thumbnail Setting
-if (el.btnChangeThumb && el.thumbInput) {
-    el.btnChangeThumb.onclick = () => el.thumbInput.click();
+if (document.getElementById('btn-change-thumb') && el.thumbInput) {
+    document.getElementById('btn-change-thumb').onclick = () => el.thumbInput.click();
     el.thumbInput.onchange = (e) => {
         const file = e.target.files[0];
         if (file && currentIndex >= 0) {
             const reader = new FileReader();
             reader.onload = (re) => {
                 queue[currentIndex].thumbnail = re.target.result;
-                if (localImage) {
-                    localImage.src = queue[currentIndex].thumbnail;
-                    localImage.style.display = 'block';
-                    localImage.style.zIndex = "5";
-                }
+                // Update active thumbnail if it's currently selected
                 renderQueue();
                 e.target.value = ''; // Reset
             };
