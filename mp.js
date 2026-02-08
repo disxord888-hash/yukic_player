@@ -311,42 +311,90 @@ function onYouTubeIframeAPIReady() {
     });
 }
 
+let lastReportedTime = 0;
+let lastActualUpdate = Date.now();
+
 function startTimeUpdates() {
     if (timeUpdateInterval) clearInterval(timeUpdateInterval);
-    timeUpdateInterval = setInterval(() => {
-        if (currentIndex >= 0 && queue[currentIndex]) {
-            const type = queue[currentIndex].type;
-            if (type === 'soundcloud' || type === 'vimeo' || type === 'file') return;
+    timeUpdateInterval = setInterval(async () => {
+        if (currentIndex < 0 || !queue[currentIndex]) return;
+        const item = queue[currentIndex];
+
+        // 1. Get current time from player (some are async)
+        let cur = 0;
+        let dur = 0;
+        let isPlaying = false;
+
+        if (item.type === 'file') {
+            if (item.isImage) {
+                cur = (Date.now() - imageStartTime) / 1000;
+                dur = item.duration || 5;
+                isPlaying = true;
+            } else if (localVideo) {
+                cur = localVideo.currentTime;
+                dur = localVideo.duration;
+                isPlaying = !localVideo.paused;
+            }
+        } else if (item.type === 'vimeo') {
+            if (vimeoPlayer) {
+                // Vimeo is async, we use the last known from timeupdate event handled elsewhere
+                // OR we can try to fetch it occasionally. 
+                // For smoothness, we'll rely on the estimator below.
+                cur = lastKnownTime;
+                dur = item.duration || 0;
+                // Detect if playing
+                isPlaying = vimeoIsPlaying; // Need to track this
+            }
+        } else if (item.type === 'soundcloud') {
+            if (scWidget) {
+                cur = lastKnownTime;
+                dur = item.duration || 0;
+                isPlaying = scIsPlaying; // Need to track this
+            }
+        } else {
+            // YouTube
+            if (isPlayerReady && player && typeof player.getCurrentTime === 'function') {
+                cur = player.getCurrentTime();
+                dur = player.getDuration();
+                isPlaying = (player.getPlayerState() === YT.PlayerState.PLAYING);
+            }
         }
-        if (!isPlayerReady || !player || typeof player.getCurrentTime !== 'function') return;
 
-        const cur = player.getCurrentTime();
-        const dur = player.getDuration();
-        const nowMs = Date.now();
+        // 2. High-res Interpolation (Estimator)
+        const now = Date.now();
+        const dt = (now - lastActualUpdate) / 1000;
+        lastActualUpdate = now;
 
-        // Standard Time Update
+        if (cur !== lastReportedTime) {
+            // API updated the time
+            lastReportedTime = cur;
+        } else if (isPlaying && dt < 1) {
+            // API hasn't updated yet, but we are playing, so estimate!
+            cur += dt;
+            // Prevent estimate from jumping past duration
+            if (dur > 0 && cur > dur) cur = dur;
+            lastReportedTime = cur;
+        }
+
+        // 3. Update UI
         el.currentTime.innerText = formatTime(cur);
-        el.duration.innerText = formatTime(dur);
+        if (dur > 0) el.duration.innerText = formatTime(dur);
         el.cumulativeTime.innerText = formatCumulative(cumulativeSeconds);
 
-        // Update Progress Bar
+        // Progress Bar
         if (dur > 0) {
             const pct = (cur / dur) * 100;
             el.progressBar.style.width = pct + '%';
-
-            // Update Mini Progress Bar in Queue
             const mini = document.getElementById(`mini-progress-${currentIndex}`);
             if (mini) mini.style.width = pct + '%';
 
             // Save state
-            if (currentIndex >= 0 && queue[currentIndex]) {
-                queue[currentIndex].lastTime = cur;
-                queue[currentIndex].duration = dur; // 長さを保存しておく
-            }
+            item.lastTime = cur;
+            if (dur > 0) item.duration = dur;
         }
 
-        // Auto-sync Info
-        if (player.getPlayerState() === YT.PlayerState.PLAYING) {
+        // Cumulative & Sync
+        if (isPlaying) {
             syncCurrentInfo();
             const diff = cur - lastKnownTime;
             if (diff > 0 && diff < 2) {
@@ -354,7 +402,12 @@ function startTimeUpdates() {
             }
         }
         lastKnownTime = cur;
-    }, 16);
+
+        // Auto-next for images
+        if (item.isImage && cur >= (item.duration || 5)) {
+            skipNext();
+        }
+    }, 32); // 30fps is enough with CSS transition 0.1s
 }
 
 function syncCurrentInfo() {

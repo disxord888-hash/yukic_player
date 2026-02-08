@@ -280,6 +280,7 @@ body {
     box-shadow: 0 0 15px var(--primary);
     /* 光量をアップ */
     transition: width 0.1s linear;
+    will-change: width;
 }
 
 .cumulative-overlay {
@@ -556,8 +557,9 @@ input {
     width: 0%;
     position: relative;
     box-shadow: 0 0 10px var(--primary);
-    transition: width 0.2s linear;
+    transition: width 0.1s linear;
     /* Smooth movement */
+    will-change: width;
 }
 
 .queue-item.active .mini-progress-bar {
@@ -643,15 +645,7 @@ input {
     cursor: pointer;
 }
 
-.progress-bar {
-    height: 100%;
-    background: var(--primary);
-    width: 0%;
-    position: relative;
-    box-shadow: 0 0 10px var(--primary);
-    transition: width 0.2s linear;
-    /* Smooth movement */
-}
+/* Progress Bar overlay styles handled in the first .progress-bar block */
 
 /* Lock Overlay */
 .lock-overlay {
