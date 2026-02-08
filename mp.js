@@ -490,54 +490,68 @@ async function getMetaData(id) {
 async function searchYoutube(query) {
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 
-    // 試行するプロキシリスト
+    // Proxies list with different methods
     const proxies = [
-        url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-        url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        url => `https://thingproxy.freeboard.io/fetch/${url}`
+        { url: u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, type: 'text' },
+        { url: u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`, type: 'text' },
+        { url: u => `https://corsproxy.io/?${encodeURIComponent(u)}`, type: 'text' },
+        { url: u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, type: 'json' }
     ];
+
+    const fetchWithTimeout = async (url, options, timeout = 5000) => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(id);
+            return response;
+        } catch (e) {
+            clearTimeout(id);
+            throw e;
+        }
+    };
 
     let html = null;
 
-    for (const getProxyUrl of proxies) {
+    for (const p of proxies) {
         try {
-            const proxyUrl = getProxyUrl(searchUrl);
-            const response = await fetch(proxyUrl);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            console.log(`Trying proxy: ${p.url(searchUrl)}`);
+            const response = await fetchWithTimeout(p.url(searchUrl));
+            if (!response.ok) continue;
 
-            // AllOriginsはJSONでラップされているが、他はテキストを直接返す場合がある
-            if (proxyUrl.includes('allorigins.win')) {
+            if (p.type === 'json') {
                 const data = await response.json();
                 html = data.contents;
             } else {
                 html = await response.text();
             }
 
-            if (html && html.includes('videoRenderer')) break; // 成功
+            if (html && (html.includes('ytInitialData') || html.includes('videoRenderer'))) break;
         } catch (e) {
-            console.warn(`Proxy ${getProxyUrl.name || 'alternative'} failed:`, e);
-            continue;
+            console.warn(`Proxy failed:`, e);
         }
     }
 
     if (!html) {
         console.error('All proxies failed for YouTube search');
-        return [];
+        return null; // Return null to indicate total failure
     }
 
     try {
         const results = [];
 
-        // Try to parse ytInitialData if present (more reliable)
-        const initialDataMatch = html.match(/var ytInitialData\s*=\s*({.*?});/);
+        // Match ytInitialData (it can be var, window.ytInitialData, window['ytInitialData'])
+        const initialDataMatch = html.match(/(?:var|window\[['"]ytInitialData['"]\]|window\.ytInitialData)\s*=\s*({.*?});/);
         if (initialDataMatch) {
             try {
                 const data = JSON.parse(initialDataMatch[1]);
-                const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
-                if (contents) {
-                    const itemSection = contents.find(c => c.itemSectionRenderer);
-                    const videos = itemSection?.itemSectionRenderer?.contents;
-                    if (videos) {
+                // Drill down to the video results
+                const sections = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents;
+                if (sections) {
+                    for (const section of sections) {
+                        const videos = section.itemSectionRenderer?.contents;
+                        if (!videos) continue;
+
                         for (const v of videos) {
                             const video = v.videoRenderer;
                             if (!video) continue;
@@ -547,60 +561,47 @@ async function searchYoutube(query) {
                             const author = video.ownerText?.runs?.[0]?.text || video.shortBylineText?.runs?.[0]?.text || "Unknown Artist";
 
                             // Shorts check
-                            const isShort = video.title?.runs?.some(r => r.text.toLowerCase().includes('#shorts')) ||
-                                video.viewCountText?.simpleText?.includes('shorts');
+                            const isShort = (video.viewCountText?.simpleText?.includes('shorts') ||
+                                title.toLowerCase().includes('#shorts'));
                             if (isShort && !isShortVideoAllowed) continue;
 
                             results.push({ id, title: decodeChars(title), author: decodeChars(author) });
                             if (results.length >= 5) break;
                         }
+                        if (results.length > 0) break;
                     }
                 }
             } catch (e) {
-                console.warn('ytInitialData parse failed, falling back to regex:', e);
+                console.warn('ytInitialData parse failed:', e);
             }
         }
 
         if (results.length === 0) {
             // Fallback regex approach
             const videoMatches = [...html.matchAll(/"videoRenderer"\s*:\s*\{/g)];
-            const indices = videoMatches.map(m => m.index);
-
-            for (let i = 0; i < indices.length; i++) {
-                const start = indices[i];
-                const end = (i < indices.length - 1) ? indices[i + 1] : html.length;
-                const block = html.substring(start, end);
+            for (const m of videoMatches) {
+                const start = m.index;
+                // Take a chunk of text
+                const block = html.substring(start, start + 2000);
 
                 const idMatch = block.match(/"videoId"\s*:\s*"([^"]+)"/);
                 if (!idMatch) continue;
                 const id = idMatch[1];
 
-                if (block.includes('"overlayStyle":"SHORTS"') || block.includes('"style":"SHORTS"') || block.includes('video-shorts-')) continue;
+                const isShort = block.includes('"overlayStyle":"SHORTS"') || block.includes('"style":"SHORTS"');
+                if (isShort && !isShortVideoAllowed) continue;
 
                 let title = "Unknown Title";
                 const tMatch = block.match(/"title"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-                if (tMatch) {
-                    title = decodeChars(tMatch[1]);
-                }
-
-                if (title.toLowerCase().includes('#shorts') && !isShortVideoAllowed) continue;
+                if (tMatch) title = decodeChars(tMatch[1]);
 
                 let author = "Unknown Artist";
                 const aMatch = block.match(/"(?:longBylineText|ownerText|shortBylineText|ownerTitle|bylineText)"\s*:\s*\{.*?"text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-                if (aMatch) {
-                    author = decodeChars(aMatch[1]);
-                }
+                if (aMatch) author = decodeChars(aMatch[1]);
 
                 results.push({ id, title, author });
                 if (results.length >= 5) break;
             }
-        }
-
-        // Final fallback for ID only
-        if (results.length === 0) {
-            const idMatches = [...html.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)];
-            const uniqueIds = [...new Set(idMatches.map(m => m[1]))].slice(0, 5);
-            return uniqueIds.map(id => ({ id, title: `Video (${id})`, author: "YouTube" }));
         }
 
         return results;
@@ -609,6 +610,7 @@ async function searchYoutube(query) {
     }
     return [];
 }
+
 
 async function openWebSearch(query) {
     if (!el.searchModal) return;
@@ -744,19 +746,36 @@ async function addToQueue(uOrId, tIn, aIn, memoIn, tierIn) {
     if (!isSoundCloudUrl(uOrId) && !isVimeoUrl(uOrId) && extractId(uOrId) === null && uOrId.length > 0 && !uOrId.startsWith('{')) {
         const btn = document.getElementById('btn-add');
         const originalText = btn ? btn.innerHTML : "";
-        if (btn) btn.innerHTML = "🔍 Search...";
+        if (btn) {
+            btn.innerHTML = "🔍 Search...";
+            btn.disabled = true;
+        }
 
         const results = await searchYoutube(uOrId);
-        if (btn) btn.innerHTML = originalText;
+
+        if (btn) {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
 
         if (results && results.length > 0) {
             showSearchSelectionModal(results, uOrId, (selected) => {
+                // Clear inputs only after successful selection
+                if (el.addUrl) el.addUrl.value = "";
+                if (el.addTitle) el.addTitle.value = "";
+                if (el.addAuthor) el.addAuthor.value = "";
+                if (el.addMemo) el.addMemo.value = "";
+                if (el.addTier) el.addTier.value = "";
+
                 addToQueue(selected.id, selected.title, selected.author, memoIn, tierIn);
             });
-            return; // モーダルで選択されるまで待機（あるいはコールバックで再入）
+            return "SEARCH_MODAL_OPENED";
         } else {
-            alert("動画が見つかりませんでした: " + uOrId);
-            return;
+            const fallback = confirm(`検索機能が一時的に制限されています。YouTubeで "${uOrId}" を直接検索しますか？`);
+            if (fallback) {
+                window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(uOrId)}`, '_blank');
+            }
+            return "SEARCH_FAILED";
         }
     }
 
@@ -1676,10 +1695,13 @@ function skipPrev() {
 }
 
 // Event Handlers
-document.getElementById('btn-add').onclick = () => {
-    addToQueue(el.addUrl.value, el.addTitle.value, el.addAuthor.value, el.addMemo.value, el.addTier ? el.addTier.value : '');
-    el.addUrl.value = el.addTitle.value = el.addAuthor.value = el.addMemo.value = '';
-    if (el.addTier) el.addTier.value = '';
+document.getElementById('btn-add').onclick = async () => {
+    const res = await addToQueue(el.addUrl.value, el.addTitle.value, el.addAuthor.value, el.addMemo.value, el.addTier ? el.addTier.value : '');
+    // Only clear if it was a direct add (not a search start)
+    if (res !== "SEARCH_MODAL_OPENED" && res !== "SEARCH_FAILED") {
+        el.addUrl.value = el.addTitle.value = el.addAuthor.value = el.addMemo.value = '';
+        if (el.addTier) el.addTier.value = '';
+    }
 };
 
 // Sort mode change handler
