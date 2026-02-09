@@ -389,7 +389,7 @@ function startTimeUpdates() {
             if (mini) mini.style.width = pct + '%';
 
             // Save state
-            item.lastTime = cur;
+            // item.lastTime = cur; // Disabled: Always start from beginning
             if (dur > 0) item.duration = dur;
         }
 
@@ -1438,7 +1438,7 @@ function playIndex(i) {
                     if (mini) mini.style.width = pct + '%';
 
                     if (currentIndex >= 0 && queue[currentIndex]) {
-                        queue[currentIndex].lastTime = cur;
+                        // queue[currentIndex].lastTime = cur; // Disabled: Always start from beginning
                         queue[currentIndex].duration = dur;
                     }
                 }
@@ -1512,7 +1512,7 @@ function playIndex(i) {
 
                         // Save state
                         if (currentIndex >= 0 && queue[currentIndex]) {
-                            queue[currentIndex].lastTime = cur;
+                            // queue[currentIndex].lastTime = cur; // Disabled: Always start from beginning
                             queue[currentIndex].duration = dur;
                         }
                     }
@@ -1619,8 +1619,8 @@ function initLocalPlayer() {
             const mini = document.getElementById(`mini-progress-${currentIndex}`);
             if (mini) mini.style.width = pct + '%';
 
-            // Save lastTime
-            queue[currentIndex].lastTime = cur;
+            // Save lastTime (Disabled: Always start from beginning)
+            // queue[currentIndex].lastTime = cur;
         }
     });
 
