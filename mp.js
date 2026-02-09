@@ -859,7 +859,7 @@ async function addToQueue(uOrId, tIn, aIn, memoIn, tierIn) {
                 author: data.author || aIn || "Author",
                 memo: data.memo || memoIn || "",
                 tier: convertOldTierToNew(data.tier || tierIn || ""),
-                lastTime: data.lastTime || 0,
+                lastTime: 0, // Always start from beginning when loading playlist
                 duration: data.duration || 0
             };
             if (item.id) {
