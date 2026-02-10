@@ -3497,9 +3497,17 @@ document.addEventListener('keydown', (e) => {
     updateKeyMonitor(e, 'down');
 
     if (e.key === 'Escape') {
-        el.helpModal.classList.remove('active');
-        if (el.searchModal) el.searchModal.classList.remove('active');
-        return;
+        const activeModals = document.querySelectorAll('.help-modal.active');
+        activeModals.forEach(m => {
+            m.classList.remove('active');
+            // Cleanup dynamic modals
+            if (m.id === 'clock-settings-modal') {
+                setTimeout(() => m.remove(), 300);
+            } else if (m.id === 'ts-modal') {
+                m.remove();
+            }
+        });
+        // Do not return; let it fall through to handleShortcutKey for prefix/monitor logic
     }
 
     // Ctrl + F for queue search
