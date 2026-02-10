@@ -3498,15 +3498,19 @@ document.addEventListener('keydown', (e) => {
 
     if (e.key === 'Escape') {
         const activeModals = document.querySelectorAll('.help-modal.active');
-        activeModals.forEach(m => {
-            m.classList.remove('active');
-            // Cleanup dynamic modals
-            if (m.id === 'clock-settings-modal') {
-                setTimeout(() => m.remove(), 300);
-            } else if (m.id === 'ts-modal') {
-                m.remove();
-            }
-        });
+        if (activeModals.length > 0) {
+            activeModals.forEach(m => {
+                m.classList.remove('active');
+                // Cleanup dynamic modals
+                if (m.id === 'clock-settings-modal') {
+                    setTimeout(() => m.remove(), 300);
+                } else if (m.id === 'ts-modal') {
+                    m.remove();
+                }
+            });
+        } else if (!e.repeat) {
+            if (el.helpModal) el.helpModal.classList.add('active');
+        }
         // Do not return; let it fall through to handleShortcutKey for prefix/monitor logic
     }
 
