@@ -108,36 +108,54 @@
                 </div>
             </div>
             <h3>ショートカットキー</h3>
-            <ul class="help-list">
-                <li><span>A / S / D / F</span> -1/36 / -1/72 / -5s / -2s</li>
-                <li><span>G</span> 再生 / 一時停止</li>
-                <li><span>H / J / K / L</span> +2s / +5s / +1/72 / +1/36</li>
-                <li><span>Z / X / C / V</span> 最初 / 前曲 / 次曲 / 最後</li>
-                <li><span>\ (¥) / ,</span> 最後へ移動 / 指定秒数へシーク</li>
-                <li><span>: (;)</span> タイムスタンプ入力 (T1...:[])</li>
-                <li><span>Shift + T</span> タイムスタンプ一覧表示</li>
-                <li><span>Shift + [1-0, -, ^]</span> 指定位置(%)シーク (/や\併用可)</li>
-                <li><span>Y [+ 1-0... / \ / ^]</span> 音量調整 (Y単体で0%)</li>
-                <li><span>Esc + M</span> ショートカットモニター表示切替</li>
-                <li><span>Shift + / (?)</span> Web検索 (Google)</li>
-                <li><span>Ctrl + F</span> キュー内検索</li>
-                <li><span>Q / E / W</span> ループ / 全体ループ / シャッフル</li>
-                <li><span>[ / ]</span> 選択項目を 複製 / 削除</li>
-                <li><span>B</span> 画面保存 (📸)</li>
-                <li><span>U</span> URLインポート (🔗)</li>
-                <li><span>I</span> ファイルインポート (📂)</li>
-                <li><span>P</span> アラーム設定 (⏰)</li>
-                <li><span>↑ / ↓</span> 音量調整 (±5%)</li>
-            </ul>
-            <div
-                style="font-size: 0.7rem; border-top: 1px solid var(--border); padding-top: 0.5rem; margin-top: 0.5rem; color: var(--text-muted); line-height: 1.4;">
-                <strong>音量調整 (Yプレフィックス):</strong><br>
-                1:1% | 2:3% | 3:5% | 4:8% | 5:15% | 6:25%<br>
-                7:40% | 8:55% | 9:75% | 0:90% | -:100% | ^:-5% | \:+5%<br>
-                <strong>シーク位置 (Shift + Key):</strong> 1:0% 〜 ^:91% (1/12刻み)<br>
-                / 併用で+2.7%(+1/36)、\ 併用で+5.5%(+2/36) オフセット
+            <div class="help-sections">
+                <div class="help-section">
+                    <h4>再生・基本操作</h4>
+                    <ul class="help-list-compact">
+                        <li><span>G</span> 再生 / 一時停止</li>
+                        <li><span>Z / X / C / V</span> 最初 / 前曲 / 次曲 / 最後</li>
+                        <li><span>Q / E / W</span> ループ / 全体ループ / シャッフル</li>
+                        <li><span>[ / ]</span> 項目を 複製 / 削除</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h4>精密シーク</h4>
+                    <ul class="help-list-compact">
+                        <li><span>A / S / D / F</span> -1/36 / -1/72 / -5s / -2s</li>
+                        <li><span>H / J / K / L</span> +2s / +5s / +1/72 / +1/36</li>
+                        <li><span>\ (¥) / ,</span> 最後へ移動 / 指定秒数シーク</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h4>音量・ジャンプ</h4>
+                    <ul class="help-list-compact">
+                        <li><span>Shift + [1-0]</span> 指定位置(%)へシーク</li>
+                        <li><span>Y [+ 1-0... ]</span> 音量調整 (Y単体で0%)</li>
+                        <li><span>↑ / ↓</span> 音量調整 (±5%)</li>
+                    </ul>
+                </div>
+                <div class="help-section">
+                    <h4>機能・ツール</h4>
+                    <ul class="help-list-compact">
+                        <li><span>Shift + T</span> タイムスタンプ表示</li>
+                        <li><span>Esc + M</span> モニター表示切替</li>
+                        <li><span>Shift + / (?)</span> Web検索 (Google)</li>
+                        <li><span>Ctrl + F</span> キュー内検索</li>
+                        <li><span>B / U / I / P</span> 保存 / URL / 📂 / ⏰</li>
+                    </ul>
+                </div>
             </div>
-            <button onclick="document.getElementById('help-modal').classList.remove('active')" class="btn">閉じる</button>
+
+            <div class="help-note">
+                <strong>音量調整 (Yプレフィックス):</strong><br>
+                1:1% | 2:3% | 3:5% | 4:8% | 5:15% | 6:25% | 7:40% | 8:55% | 9:75% | 0:90% | -:100% | ^:-5% | \:+5%
+            </div>
+            <div class="help-note">
+                <strong>シーク位置 (Shift + Key):</strong> 1:0% 〜 ^:91% (1/12刻み)<br>
+                / 併用で+1/36秒、\ 併用で+2/36秒 オフセット
+            </div>
+            <button onclick="document.getElementById('help-modal').classList.remove('active')" class="btn primary-btn"
+                style="width: 100%; margin-top: 1.5rem; padding: 1rem; font-size: 1.1rem;">閉じる</button>
         </div>
     </div>
 
