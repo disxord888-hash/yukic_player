@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yukic-player-v1';
+const CACHE_NAME = 'yukic-player-v2';
 const ASSETS = [
     './',
     './index.html',
@@ -17,10 +17,23 @@ self.addEventListener('install', (event) => {
     );
 });
 
+// Activate event to clean up old caches
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.filter((name) => name !== CACHE_NAME)
+                    .map((name) => caches.delete(name))
+            );
+        })
+    );
+});
+
+// Network-first strategy to ensure updates are seen
 self.addEventListener('fetch', (event) => {
     event.respondWith(
-        caches.match(event.request).then((response) => {
-            return response || fetch(event.request);
+        fetch(event.request).catch(() => {
+            return caches.match(event.request);
         })
     );
 });
