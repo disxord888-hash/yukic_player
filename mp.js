@@ -1823,38 +1823,63 @@ if (el.sortMode) {
 // Screenshot Share Modal Logic
 /**
  * Applies a blurred version of an image URL to a target element's background.
- * This is a workaround for html2canvas not supporting CSS blur filters.
+ * Uses a tiny-canvas technique to ensure blur works across all environments
+ * and avoids html2canvas filter limitations.
  */
 function applyBlurredBg(url, targetEl) {
     if (!url) return;
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        try {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
 
-        // Small canvas for natural blur + performance
-        canvas.width = 400;
-        canvas.height = 600;
+            // 1. Draw to a tiny canvas (low-res = natural blur)
+            const tinyW = 40;
+            const tinyH = 60;
+            canvas.width = tinyW;
+            canvas.height = tinyH;
 
-        // Background should be dark enough
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const scale = Math.max(tinyW / img.width, tinyH / img.height);
+            const w = img.width * scale;
+            const h = img.height * scale;
+            const x = (tinyW - w) / 2;
+            const y = (tinyH - h) / 2;
 
-        // Apply blur filter on the canvas context
-        ctx.filter = 'blur(20px) brightness(0.7)';
+            ctx.drawImage(img, x, y, w, h);
 
-        // Draw covered
-        const scale = Math.max(canvas.width / img.width, canvas.height / img.height);
-        const w = img.width * scale;
-        const h = img.height * scale;
-        const x = (canvas.width - w) / 2;
-        const y = (canvas.height - h) / 2;
+            // 2. Scale up to a final canvas with additional filter if possible
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = 400;
+            finalCanvas.height = 600;
+            const finalCtx = finalCanvas.getContext('2d');
 
-        ctx.drawImage(img, x, y, w, h);
-        targetEl.style.backgroundImage = `url(${canvas.toDataURL('image/jpeg', 0.8)})`;
+            // Dark overlay
+            finalCtx.fillStyle = "#000";
+            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+
+            if ('filter' in finalCtx) {
+                finalCtx.filter = 'blur(4px) brightness(0.6)';
+            }
+
+            finalCtx.imageSmoothingEnabled = true;
+            finalCtx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+
+            // 3. Apply as background
+            const blurredData = finalCanvas.toDataURL('image/jpeg', 0.8);
+            targetEl.style.backgroundImage = `url(${blurredData})`;
+        } catch (e) {
+            console.warn("Canvas blur failed (likely CORS), falling back to sharp image", e);
+            targetEl.style.backgroundImage = `url(${url})`;
+        }
     };
-    img.src = url;
+    img.onerror = () => {
+        targetEl.style.backgroundImage = `url(${url})`;
+    };
+    // Append timestamp to bypass cache if it was cached without CORS headers
+    const cacheBuster = url.includes('?') ? '&' : '?';
+    img.src = url + cacheBuster + 't=' + Date.now();
 }
 
 async function openScreenshotModal() {
@@ -1981,15 +2006,28 @@ async function saveShareCardImage() {
         }
 
         // Copy both image and text to clipboard
-        const item = new ClipboardItem({
-            'image/png': blob,
-            'text/plain': new Blob([githubUrl], { type: 'text/plain' })
-        });
-
-        await navigator.clipboard.write([item]);
-        btn.innerText = "✅ コピー完了";
+        if (navigator.clipboard && typeof navigator.clipboard.write === 'function') {
+            try {
+                const item = new ClipboardItem({
+                    'image/png': blob,
+                    'text/plain': new Blob([githubUrl], { type: 'text/plain' })
+                });
+                await navigator.clipboard.write([item]);
+                btn.innerText = "✅ コピー完了";
+            } catch (copyErr) {
+                console.warn("Combined copy failed, falling back to text only:", copyErr);
+                // Fallback to plain text URL if combined copy fails
+                await navigator.clipboard.writeText(githubUrl);
+                btn.innerText = "✅ リンクのみコピー";
+                alert("画像のコピーに失敗したため、リンクのみコピーしました。\n(ブラウザの設定により画像のコピーが制限されている可能性があります)");
+            }
+        } else {
+            // Very old browsers fallback
+            await navigator.clipboard.writeText(githubUrl);
+            btn.innerText = "✅ リンクのみコピー";
+        }
     } catch (e) {
-        console.error("Share copy failed:", e);
+        console.error("Share process failed:", e);
         alert("コピーに失敗しました。ブラウザの権限設定を確認してください。\nError: " + e);
         btn.innerText = "Error";
     } finally {
