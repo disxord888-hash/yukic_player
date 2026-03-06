@@ -39,31 +39,7 @@
         <button id="clock-help-btn" class="help-btn" title="Shortcuts">▼</button>
     </div>
 
-    <div id="search-modal" class="help-modal">
-        <div class="search-modal-content">
-            <div class="search-bar">
-                <span id="search-url-text">Searching Google...</span>
-                <button onclick="document.getElementById('search-modal').classList.remove('active')"
-                    class="close-btn">×</button>
-            </div>
-            <div
-                style="flex:1; display:flex; flex-direction:column; background:#fff; align-items:center; justify-content:center; position:relative;">
-                <div id="search-fallback"
-                    style="display:none; position:absolute; inset:0; z-index:10; background:#fff; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:20px; text-align:center;">
-                    <div style="color:#5f6368; font-size:1.1rem; font-weight:bold;">Googleで直接検索</div>
-                    <button id="search-open-btn" class="btn primary-btn"
-                        style="padding:15px 40px; font-size:1.2rem; border-radius:30px; box-shadow:0 4px 10px rgba(0,0,0,0.2);">
-                        G 検索を開く
-                    </button>
-                    <div style="font-size:0.8rem; color:#999; max-width:300px;">
-                        Googleは埋め込み表示を制限しているため、上のボタンから別タブで開く必要があります。
-                    </div>
-                </div>
-                <iframe src="" id="search-iframe"
-                    style="width:100%; height:100%; border:none; background:#fff;"></iframe>
-            </div>
-        </div>
-    </div>
+
 
     <!-- Help Button / Modal -->
     <!-- Top Right Controls -->
@@ -139,7 +115,7 @@
                     <ul class="help-list-compact">
                         <li><span>Shift + T</span> タイムスタンプ表示</li>
                         <li><span>Esc + M</span> モニター表示切替</li>
-                        <li><span>Shift + / (?)</span> Web検索 (Google)</li>
+
                         <li><span>Ctrl + F</span> キュー内検索</li>
                         <li><span>B / U / I / P</span> 保存 / URL / 📂 / ⏰</li>
                     </ul>

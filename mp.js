@@ -292,11 +292,7 @@ const el = {
     heldKeysIndicator: document.getElementById('held-keys-indicator'),
     presetSelect: document.getElementById('preset-select'),
     queueSearch: document.getElementById('queue-search'),
-    searchModal: document.getElementById('search-modal'),
-    searchIframe: document.getElementById('search-iframe'),
-    searchUrlText: document.getElementById('search-url-text'),
-    searchFallback: document.getElementById('search-fallback'),
-    searchOpenBtn: document.getElementById('search-open-btn'),
+
     localThumb: null // For dynamically assigned local thumbnail
 };
 const announcementTimes = document.querySelectorAll('.ann-time');
@@ -712,30 +708,7 @@ async function searchYoutube(query) {
 }
 
 
-async function openWebSearch(query) {
-    if (!el.searchModal) return;
 
-    const engineUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&igu=1`;
-    const fallbackUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-
-    el.searchUrlText.innerText = `Searching Google: "${query}"`;
-    el.searchIframe.src = engineUrl;
-    el.searchModal.classList.add('active');
-
-    if (el.searchOpenBtn) {
-        el.searchOpenBtn.onclick = () => window.open(fallbackUrl, '_blank');
-    }
-
-    // Check if iframe is blocked (X-Frame-Options)
-    // We can't strictly check but we show the fallback after a delay
-    el.searchFallback.style.display = 'none';
-    setTimeout(() => {
-        // If the user is still on the modal, show the fallback button just in case
-        if (el.searchModal.classList.contains('active')) {
-            el.searchFallback.style.display = 'flex';
-        }
-    }, 2000);
-}
 
 function showSearchSelectionModal(results, query, onSelect) {
     const modal = document.createElement('div');
@@ -3599,13 +3572,7 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // ? key (Shift + /) for web search
-    if (e.shiftKey && (e.key === '?' || e.key === '/')) {
-        const query = prompt("Googleで検索:");
-        if (query) openWebSearch(query);
-        e.preventDefault();
-        return;
-    }
+
 
     // Esc + m toggle for shortcut monitor
     if (e.key.toLowerCase() === 'm' && heldKeysMap.has('Escape')) {
