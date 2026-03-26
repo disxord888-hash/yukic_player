@@ -1258,10 +1258,6 @@ function renderItemsActive() {
         }
         if (isActive) activeLi = li;
     });
-
-    if (activeLi) {
-        activeLi.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
 }
 
 function playIndex(i) {
@@ -1954,7 +1950,7 @@ async function saveShareCardImage() {
     if (!card || !btn) return;
 
     const originalText = btn.innerText;
-    btn.innerText = "コピー中... (Copying)";
+    btn.innerText = "コピー中...";
     btn.disabled = true;
 
     try {
@@ -1970,34 +1966,34 @@ async function saveShareCardImage() {
 
         const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
 
-        // Prepare GitHub link
-        const shareableQueue = getShareableQueue();
-        let githubUrl = "";
-        if (shareableQueue.length > 0) {
-            const data = encodeURIComponent(JSON.stringify(shareableQueue));
-            githubUrl = `https://disxord888-hash.github.io/yukic_player/?=${data}`;
-        }
-
-        // Copy both image and text to clipboard
+        // Copy image to clipboard
         if (navigator.clipboard && typeof navigator.clipboard.write === 'function') {
             try {
                 const item = new ClipboardItem({
-                    'image/png': blob,
-                    'text/plain': new Blob([githubUrl], { type: 'text/plain' })
+                    'image/png': blob
                 });
                 await navigator.clipboard.write([item]);
                 btn.innerText = "✅ コピー完了";
             } catch (copyErr) {
-                console.warn("Combined copy failed, falling back to text only:", copyErr);
-                // Fallback to plain text URL if combined copy fails
-                await navigator.clipboard.writeText(githubUrl);
-                btn.innerText = "✅ リンクのみコピー";
-                alert("画像のコピーに失敗したため、リンクのみコピーしました。\n(ブラウザの設定により画像のコピーが制限されている可能性があります)");
+                console.warn("Image copy failed:", copyErr);
+                // Fallback: download
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'share.png';
+                a.click();
+                URL.revokeObjectURL(url);
+                btn.innerText = "✅ ダウンロード完了";
             }
         } else {
-            // Very old browsers fallback
-            await navigator.clipboard.writeText(githubUrl);
-            btn.innerText = "✅ リンクのみコピー";
+            // Fallback: download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'share.png';
+            a.click();
+            URL.revokeObjectURL(url);
+            btn.innerText = "✅ ダウンロード完了";
         }
     } catch (e) {
         console.error("Share process failed:", e);
@@ -3549,6 +3545,10 @@ document.addEventListener('keydown', (e) => {
 
     if (isLocked) return;
 
+    // Skip shortcuts when any modal is active (help, alarm, URL import, etc.)
+    const anyModalActive = document.querySelector('.help-modal.active');
+    if (anyModalActive) return;
+
     // Allow shortcuts from document body OR the designated shortcut input
     const target = e.target;
     // const isInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
@@ -4641,6 +4641,70 @@ if (el.nowId) {
 // Queue Search Event
 if (el.queueSearch) {
     el.queueSearch.oninput = () => renderQueue();
+}
+
+// Capture Thumbnail from Player
+const btnCaptureThumb = document.getElementById('btn-capture-thumb');
+if (btnCaptureThumb) {
+    btnCaptureThumb.onclick = () => {
+        const targetIdx = selectedListIndex >= 0 ? selectedListIndex : currentIndex;
+        if (targetIdx < 0 || !queue[targetIdx]) return;
+        const item = queue[targetIdx];
+
+        if (item.type === 'file') {
+            if (item.isImage && localImage && localImage.src) {
+                // Use the image itself as thumbnail
+                const canvas = document.createElement('canvas');
+                canvas.width = localImage.naturalWidth || 320;
+                canvas.height = localImage.naturalHeight || 180;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(localImage, 0, 0, canvas.width, canvas.height);
+                item.thumbnail = canvas.toDataURL('image/jpeg', 0.85);
+                renderQueue();
+            } else if (localVideo && !localVideo.paused) {
+                // Capture current frame from local video
+                const canvas = document.createElement('canvas');
+                canvas.width = localVideo.videoWidth || 320;
+                canvas.height = localVideo.videoHeight || 180;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                item.thumbnail = canvas.toDataURL('image/jpeg', 0.85);
+                renderQueue();
+            } else if (localVideo) {
+                // Video paused - still capture
+                const canvas = document.createElement('canvas');
+                canvas.width = localVideo.videoWidth || 320;
+                canvas.height = localVideo.videoHeight || 180;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(localVideo, 0, 0, canvas.width, canvas.height);
+                item.thumbnail = canvas.toDataURL('image/jpeg', 0.85);
+                renderQueue();
+            }
+        } else if (!item.type || item.type === 'youtube') {
+            // YouTube: use hqdefault thumbnail
+            const id = item.id;
+            if (id) {
+                item.thumbnail = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+                renderQueue();
+            }
+        } else if (item.type === 'vimeo') {
+            // Vimeo: try to get thumbnail via oembed
+            getVimeoMeta(item.id).then(meta => {
+                if (meta.thumbnail) {
+                    item.thumbnail = meta.thumbnail;
+                    renderQueue();
+                }
+            });
+        } else if (item.type === 'soundcloud') {
+            // SoundCloud: try to get thumbnail via oembed
+            getSoundCloudMeta(item.id).then(meta => {
+                if (meta.thumbnail) {
+                    item.thumbnail = meta.thumbnail;
+                    renderQueue();
+                }
+            });
+        }
+    };
 }
 
 // Manual Thumbnail Setting

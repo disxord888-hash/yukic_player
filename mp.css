@@ -1314,6 +1314,8 @@ input:checked+.slider:before {
     border-radius: 8px;
     margin: 1.5rem 0;
     overflow-x: auto;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .kbd-row {

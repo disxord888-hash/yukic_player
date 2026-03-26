@@ -86,6 +86,21 @@
             <h3>ショートカットキー</h3>
             <div class="keyboard-layout">
                 <div class="kbd-row">
+                    <kbd>1<span>Seek%</span></kbd>
+                    <kbd>2<span>Seek%</span></kbd>
+                    <kbd>3<span>Seek%</span></kbd>
+                    <kbd>4<span>Seek%</span></kbd>
+                    <kbd>5<span>Seek%</span></kbd>
+                    <kbd>6<span>Seek%</span></kbd>
+                    <kbd>7<span>Seek%</span></kbd>
+                    <kbd>8<span>Seek%</span></kbd>
+                    <kbd>9<span>Seek%</span></kbd>
+                    <kbd>0<span>Seek%</span></kbd>
+                    <kbd>-<span>Seek%</span></kbd>
+                    <kbd>^<span>Seek%</span></kbd>
+                    <kbd>¥<span>Jump末</span></kbd>
+                </div>
+                <div class="kbd-row" style="margin-left:15px;">
                     <kbd>Q<span>Loop</span></kbd>
                     <kbd>W<span>Shuf</span></kbd>
                     <kbd>E<span>Q-Loop</span></kbd>
@@ -96,11 +111,10 @@
                     <kbd>I<span>File</span></kbd>
                     <kbd>O<span>Stop</span></kbd>
                     <kbd>P<span>Alarm</span></kbd>
+                    <kbd>@<span></span></kbd>
                     <kbd>[<span>Copy</span></kbd>
-                    <kbd>]<span>Del</span></kbd>
-                    <kbd>\\<span>End</span></kbd>
                 </div>
-                <div class="kbd-row" style="margin-left:20px;">
+                <div class="kbd-row" style="margin-left:22px;">
                     <kbd>A<span>-30s</span></kbd>
                     <kbd>S<span>-10s</span></kbd>
                     <kbd>D<span>-5s</span></kbd>
@@ -110,20 +124,22 @@
                     <kbd>J<span>+5s</span></kbd>
                     <kbd>K<span>+10s</span></kbd>
                     <kbd>L<span>+30s</span></kbd>
-                    <kbd>;<span>Memo(TS)</span></kbd>
-                    <kbd>'<span></span></kbd>
+                    <kbd>;<span>Memo</span></kbd>
+                    <kbd>:<span></span></kbd>
+                    <kbd>]<span>Del</span></kbd>
                 </div>
-                <div class="kbd-row" style="margin-left:40px;">
+                <div class="kbd-row" style="margin-left:30px;">
                     <kbd>Z<span>Top</span></kbd>
                     <kbd>X<span>Prev</span></kbd>
                     <kbd>C<span>Next</span></kbd>
-                    <kbd>V<span>End(V)</span></kbd>
+                    <kbd>V<span>Last</span></kbd>
                     <kbd>B<span>Save</span></kbd>
                     <kbd>N<span></span></kbd>
                     <kbd>M<span>Monitor</span></kbd>
                     <kbd>,<span>Seek(s)</span></kbd>
                     <kbd>.<span></span></kbd>
                     <kbd>/<span></span></kbd>
+                    <kbd>＼<span></span></kbd>
                 </div>
                 <div class="kbd-row" style="align-items:center; justify-content:center; margin-top:10px;">
                     <kbd style="width:200px;">Space<span>Play / Pause</span></kbd>
@@ -274,7 +290,7 @@
                     class="btn" style="flex: 1; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">閉じる</button>
                 <button id="btn-save-share-image" class="btn primary-btn"
                     style="flex: 2; padding: 10px 30px; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
-                    画像とリンクをコピー (Copy)
+                    画像コピー
                 </button>
             </div>
             <p style="color: rgba(255,255,255,0.6); font-size: 0.8rem;">※ 画像生成には数秒かかる場合があります</p>
@@ -326,7 +342,8 @@
                         style="color: var(--text-muted); font-size: 0.9rem; resize: vertical; min-height: 2em;"></textarea>
                     <div style="display:flex; gap:0.5rem; align-items:center;">
                         <input type="text" id="now-id" class="info-input" placeholder="Video ID / URL" style="flex:1;">
-                        <button id="btn-change-thumb" class="btn small-btn" title="Set Thumbnail">🖼️</button>
+                        <button id="btn-capture-thumb" class="btn small-btn" title="Capture Thumbnail from Player">📷</button>
+                        <button id="btn-change-thumb" class="btn small-btn" title="Set Thumbnail from File">🖼️</button>
                     </div>
                     <input type="file" id="thumb-input" style="display:none;" accept="image/*">
                 </div>
