@@ -10,6 +10,15 @@ try {
     });
 } catch (e) { }
 
+// Fetch version and update help modal header
+fetch('version.json').then(r => r.json()).then(data => {
+    const v = data.version || 'v0.0.0';
+    const titleEl = document.getElementById('help-modal-title');
+    const urlEl = document.getElementById('help-modal-url');
+    if (titleEl) titleEl.textContent = `YMP - ${v}`;
+    if (urlEl) urlEl.textContent = `disxord888-hash.github.io/YMP_${v}/`;
+}).catch(() => {});
+
 // State
 let queue = [];
 let currentIndex = -1;
@@ -1786,29 +1795,23 @@ async function openScreenshotModal() {
     sAuthor.innerText = author;
 
     // Update Tier
-    sTier.innerText = getTierShortText(tier);
-    if (tier && TIER_THEMES[tier]) {
+    const tierText = getTierShortText(tier);
+    if (tierText) {
+        sTier.innerText = tierText;
         sTier.style.display = 'block';
-        const theme = TIER_THEMES[tier];
-        sTier.style.background = theme.primary;
-        sTier.style.color = theme.contrast;
-        sTier.style.boxShadow = `0 4px 15px ${theme.primary}66`; // 40% alpha
-
-        // Update bars color
-        const bars = document.querySelectorAll('.sc-bar');
-        bars.forEach(b => {
-            b.style.background = theme.primary;
-            b.style.boxShadow = `0 0 10px ${theme.primary}`;
-        });
+        sTier.style.background = 'var(--primary)';
+        sTier.style.color = '#fff';
+        sTier.style.boxShadow = '0 4px 15px rgba(59,130,246,0.4)';
     } else {
         sTier.style.display = 'none';
-        // Default bars
-        const bars = document.querySelectorAll('.sc-bar');
-        bars.forEach(b => {
-            b.style.background = 'var(--primary)';
-            b.style.boxShadow = '0 0 10px var(--primary)';
-        });
     }
+
+    // Bars always use default color
+    const bars = document.querySelectorAll('.sc-bar');
+    bars.forEach(b => {
+        b.style.background = 'var(--primary)';
+        b.style.boxShadow = '0 0 10px var(--primary)';
+    });
 
     // Update Image
     // Check if maxresdefault exists for YouTube (sometimes 404), fallback to hqdefault
