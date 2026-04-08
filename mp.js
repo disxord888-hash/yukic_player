@@ -11,9 +11,9 @@ try {
 } catch (e) { }
 
 // Fetch version and update all brandings
-let currentVersion = 'v0.2.5';
+let currentVersion = 'v0.2.6';
 fetch('version.json').then(r => r.json()).then(data => {
-    const v = data.version || 'v0.2.5';
+    const v = data.version || 'v0.2.6';
     currentVersion = v;
 
     // Help Modal
@@ -379,6 +379,13 @@ function syncCurrentInfo() {
         if (el.nowTier && el.nowTier.value !== String(item.tier || "0")) {
             el.nowTier.value = item.tier || "0";
             if (el.nowTierDisplay) el.nowTierDisplay.textContent = getTierShortText(item.tier || "-");
+        }
+
+        // Discordやブラウザタブ等アクティビティ表示向けにタイトルを更新
+        if (item.title && item.title !== "Loading...") {
+            document.title = `${item.title} - ${item.author} | YMP`;
+        } else {
+            document.title = `YMP ${currentVersion} - Yukic Music Player`;
         }
     }
 }
@@ -3701,6 +3708,9 @@ function mediaStop() {
     } else {
         if (player) { player.stopVideo(); }
     }
+    
+    // 停止時はタイトルを元に戻す
+    document.title = `YMP ${currentVersion} - Yukic Music Player`;
 }
 
 function mediaSeek(delta) {
